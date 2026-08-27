@@ -21,10 +21,13 @@ import android.media.PlaybackParams;
 import android.media.audiofx.BassBoost;
 import android.media.audiofx.Equalizer;
 import android.media.audiofx.Virtualizer;
+import android.media.audiofx.Visualizer;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Base64;
@@ -62,6 +65,10 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     private boolean replayGainEnabled = false;
     private float tempo = 1.0f;
     private boolean playbackActive = false;
+    private Visualizer nativeVisualizer = null;
+    private boolean vizCaptureOn = false;
+    private int audioSessionId = 0;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
     private String currentPath = "";
     private String nextPath = "";
@@ -556,6 +563,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     }
 
     private void setupAudioFx(int audioSessionId) {
+        this.audioSessionId = audioSessionId;
         try {
             if (nativeEqualizer != null) {
                 try { nativeEqualizer.release(); } catch (Exception ignored) {}
@@ -723,6 +731,163 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
             mediaPlayer.start();
             updateKeepScreenOn(true);
             updatePlaybackState(PlaybackState.STATE_PLAYING, getCurrentPosition(), 1.0f);
+        }
+    }
+
+    // ---------- REAL-TIME SPECTRUM CAPTURE (android.media.audiofx.Visualizer) ----------
+
+    @JavascriptInterface
+    public boolean hasVisualizerPermission() {
+        if (Build.VERSION.SDK_INT >= 23) {
+            return activity.checkSelfPermission("android.permission.RECORD_AUDIO") == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+
+    @JavascriptInterface
+    public void requestVisualizerPermission() {
+        if (Build.VERSION.SDK_INT >= 23) {
+            activity.requestPermissions(new String[]{"android.permission.RECORD_AUDIO"}, 102);
+        }
+    }
+
+    @JavascriptInterface
+    public boolean startVisualizerCapture() {
+        try {
+            if (nativeVisualizer != null) return true;
+            if (audioSessionId == 0 || mediaPlayer == null) return false;
+            nativeVisualizer = new Visualizer(audioSessionId);
+            int capSize = Math.min(512, Visualizer.getCaptureSizeRange()[1]);
+            nativeVisualizer.setCaptureSize(Math.max(Visualizer.getCaptureSizeRange()[0], capSize));
+            nativeVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {
+                @Override
+                public void onWaveFormDataCapture(Visualizer v, byte[] waveform, int rate) {}
+
+                @Override
+                public void onFftDataCapture(Visualizer v, byte[] fft, int rate) {
+                    if (!vizCaptureOn) return;
+                    try {
+                        final int bands = 32;
+                        final int half = fft.length / 2;
+                        StringBuilder sb = new StringBuilder(bands * 4);
+                        for (int i = 0; i < bands; i++) {
+                            double pos = Math.pow(half, (double) i / (bands - 1));
+                            int bin = Math.max(1, Math.min(half - 1, (int) pos));
+                            double re = fft[2 * bin];
+                            double im = fft[2 * bin + 1];
+                            double mag = Math.sqrt(re * re + im * im) / 127.0;
+                            mag = Math.min(1.0, mag * 2.4);
+                            if (i > 0) sb.append(',');
+                            sb.append((int) Math.round(mag * 255));
+                        }
+                        final String csv = sb.toString();
+                        runOnJs("if (window.onVisualizerData) { window.onVisualizerData('" + csv + "'); }");
+                    } catch (Exception ignored) {}
+                }
+            }, Math.max(2000, Visualizer.getMaxCaptureRate() / 2), true, false);
+            nativeVisualizer.setEnabled(true);
+            vizCaptureOn = true;
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "Visualizer unavailable: " + e.getMessage());
+            nativeVisualizer = null;
+            return false;
+        }
+    }
+
+    @JavascriptInterface
+    public void stopVisualizerCapture() {
+        vizCaptureOn = false;
+        try {
+            if (nativeVisualizer != null) {
+                nativeVisualizer.setEnabled(false);
+                nativeVisualizer.release();
+            }
+        } catch (Exception ignored) {}
+        nativeVisualizer = null;
+    }
+
+    // ---------- CROSSFADE (dual MediaPlayer with volume ramps) ----------
+
+    @JavascriptInterface
+    public boolean crossfadeAudio(final String pathOrUri, final float seconds) {
+        if (mediaPlayer == null || seconds <= 0f) return false;
+        try {
+            final MediaPlayer next = new MediaPlayer();
+            next.setAudioAttributes(
+                    new AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .build()
+            );
+            setSourceOnPlayer(next, pathOrUri);
+            next.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                @Override
+                public void onPrepared(final MediaPlayer mp) {
+                    try {
+                        final long fadeMs = Math.max(150, (long) (seconds * 1000));
+                        final int steps = 20;
+                        mp.setVolume(0f, 0f);
+                        mp.start();
+                        for (int i = 1; i <= steps; i++) {
+                            final float v = i / (float) steps;
+                            handler.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        mp.setVolume(v, v);
+                                        if (mediaPlayer != null && mediaPlayer != mp) {
+                                            mediaPlayer.setVolume(1f - v, 1f - v);
+                                        }
+                                    } catch (Exception ignored) {}
+                                }
+                            }, fadeMs * i / steps);
+                        }
+                        handler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    setupAudioFx(mp.getAudioSessionId());
+                                    MediaPlayer old = mediaPlayer;
+                                    mediaPlayer = mp;
+                                    playbackActive = true;
+                                    currentPath = pathOrUri;
+                                    if (old != null) {
+                                        try { old.release(); } catch (Exception ignored) {}
+                                    }
+                                    updatePlaybackState(PlaybackState.STATE_PLAYING, 0, 1.0f);
+                                    runOnJs("if (window.onCrossfadeComplete) { window.onCrossfadeComplete(); }");
+                                } catch (Exception e) {
+                                    Log.w(TAG, "crossfade promote failed: " + e.getMessage());
+                                }
+                            }
+                        }, fadeMs + 60);
+                    } catch (Exception e) {
+                        Log.w(TAG, "crossfade start failed: " + e.getMessage());
+                    }
+                }
+            });
+            next.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override
+                public void onCompletion(MediaPlayer mp) {
+                    playbackActive = false;
+                    updateKeepScreenOn(false);
+                    runOnJs("if (window.onAudioFinished) { window.onAudioFinished(); }");
+                }
+            });
+            next.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                @Override
+                public boolean onError(MediaPlayer mp, int what, int extra) {
+                    playbackActive = false;
+                    runOnJs("if (window.onAudioError) { window.onAudioError(" + what + "); }");
+                    return true;
+                }
+            });
+            next.prepareAsync();
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "crossfade error: " + e.getMessage());
+            return false;
         }
     }
 

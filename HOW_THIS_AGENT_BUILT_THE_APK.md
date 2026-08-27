@@ -79,7 +79,7 @@ The script runs, in order:
 ## Verification Results
 
 - `aapt2 dump badging DaddyAmp.apk`
-  - package: `com.audify.music`, versionCode: `5`, versionName: `1.4`
+  - package: `com.audify.music`, versionCode: `6`, versionName: `1.5`
   - sdkVersion: `21`, targetSdkVersion: `34`
   - application-label: `DaddyAmp`
   - launchable-activity: `com.audify.music.MainActivity`
