@@ -6,7 +6,7 @@
 <title>DaddyAmp — Flagship Audio Instrument</title>
 <style>
 /* =========================================================================
-   DADDYAMP DESIGN SYSTEM — POWERAMP PRECISION, PHYSICAL DENSITY & RESTRAINT
+   GRAIN TEXTURE OVERLAY (Premium tactile feel)
    ========================================================================= */
 :root {
   /* Surfaces & Depths */
@@ -1538,11 +1538,185 @@ input:checked + .toggle-slider-bar::before {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* =========================================================================
+   GRAIN TEXTURE OVERLAY (Premium tactile feel)
+   ========================================================================= */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px 128px;
+}
+
+/* =========================================================================
+   PREMIUM EMPTY STATES
+   ========================================================================= */
+.empty-state-craft {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px 64px 20px;
+  text-align: center;
+  gap: 14px;
+}
+
+.empty-state-illustration {
+  width: 96px;
+  height: 96px;
+  opacity: 0.7;
+  animation: vinylSpin 10s linear infinite;
+}
+
+@keyframes vinylSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.empty-state-headline {
+  font-size: 15px;
+  font-weight: 750;
+  color: var(--text-pure);
+  letter-spacing: -0.2px;
+}
+
+.empty-state-sub {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  max-width: 280px;
+  line-height: 1.55;
+}
+
+.empty-state-ctas {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* =========================================================================
+   MINI PLAYER ENHANCEMENTS
+   ========================================================================= */
+.mini-format-chip {
+  display: none;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  background: rgba(0, 229, 255, 0.15);
+  color: var(--accent);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+
+.mini-format-chip.visible {
+  display: inline-block;
+}
+
+.mini-swipe-hint {
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 8.5px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition: opacity 0.3s;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.mini-swipe-hint.visible {
+  opacity: 0.55;
+}
+
+/* =========================================================================
+   PULL-TO-REFRESH
+   ========================================================================= */
+#pull-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 0;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  position: relative;
+  z-index: 5;
+}
+
+#pull-indicator.visible {
+  opacity: 1;
+}
+
+#pull-indicator svg {
+  color: var(--accent);
+}
+
+@keyframes pullArrowBounce {
+  from { transform: translateY(-3px); }
+  to { transform: translateY(2px); }
+}
+
+/* =========================================================================
+   STAGGERED ROW ENTRANCE ANIMATIONS
+   ========================================================================= */
+.song-catalog-row {
+  /* existing styles... */
+  animation: rowEntrance 0.22s ease-out both;
+}
+
+@keyframes rowEntrance {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================================================
+   BOOKMARK / MARKER SYSTEM
+   ========================================================================= */
+.marker-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--heart-color);
+  border-radius: 50%;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: 0 0 6px rgba(255, 51, 102, 0.6);
+  transition: transform 0.1s;
+}
+
+.marker-dot:hover {
+  transform: translateY(-50%) scale(1.3);
+}
 </style>
 </head>
 <body>
 
 <div id="daddyamp-root">
+  <!-- Grain texture overlay for premium tactile feel -->
+  <div class="grain-overlay"></div>
 
   <!-- TOP APPLICATION BAR -->
   <header id="daddyamp-header">
@@ -1599,6 +1773,11 @@ input:checked + .toggle-slider-bar::before {
 
   <!-- SCROLLABLE LIBRARY MAIN VIEWPORT -->
   <main id="library-scroll-container">
+    <!-- Pull-to-Refresh Indicator -->
+    <div id="pull-indicator">
+      <svg class="icon icon-md" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      <span style="font-size: 10.5px; font-weight: 700; color: var(--accent); letter-spacing: 0.8px;">REFRESHING</span>
+    </div>
     
     <!-- Instant Search & Action Bar -->
     <div class="catalog-filter-strip">
@@ -1651,13 +1830,14 @@ input:checked + .toggle-slider-bar::before {
   </main>
 
   <!-- DOCKED PERSISTENT MINI PLAYER -->
-  <div id="docked-mini-player" onclick="expandNowPlayingScreen()">
+  <div id="docked-mini-player" onclick="expandNowPlayingScreen()"
+       ontouchstart="miniSwipeStart(event)" ontouchmove="miniSwipeMove(event)" ontouchend="miniSwipeEnd(event)">
     <div class="mini-progress-accent-line" id="mini-progress-line"></div>
     <img src="artwork/default.png" alt="Cover" class="mini-cover-thumb" id="mini-thumb-img">
     
     <div class="mini-meta-col">
       <div class="mini-title-line" id="mini-meta-title">No track selected</div>
-      <div class="mini-artist-line" id="mini-meta-artist">DaddyAmp</div>
+      <div class="mini-artist-line" id="mini-meta-artist">DaddyAmp <span class="mini-format-chip" id="mini-format-chip"></span></div>
     </div>
 
     <div class="mini-trailing-actions" onclick="event.stopPropagation()">
@@ -1670,6 +1850,13 @@ input:checked + .toggle-slider-bar::before {
       <button class="btn-action-tap" onclick="executePlayNext()">
         <svg class="icon icon-md" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
       </button>
+    </div>
+    
+    <!-- Swipe hint (shows briefly on first interaction) -->
+    <div class="mini-swipe-hint" id="mini-swipe-hint">
+      <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      <span>swipe</span>
+      <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
   </div>
 
@@ -1828,6 +2015,11 @@ input:checked + .toggle-slider-bar::before {
         <button class="transport-btn-round" id="ctrl-repeat-btn" onclick="cycleRepeatMode()" title="Repeat">
           <svg class="icon icon-md" id="ctrl-repeat-svg" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
           <div class="transport-active-dot"></div>
+        </button>
+
+        <!-- Bookmark / Marker Button -->
+        <button class="transport-btn-round" onclick="addMarkerAtCurrentPosition()" title="Add Bookmark">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
         </button>
       </div>
 
@@ -2137,11 +2329,30 @@ input:checked + .toggle-slider-bar::before {
           <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
           Audio File Details
         </div>
+        <div class="action-menu-row" onclick="showMarkersSheet()">
+          <svg class="icon icon-md" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          Track Markers
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 6. IN-PLACE TAG EDITOR MODAL -->
+  <!-- 6b. TRACK MARKERS SHEET -->
+  <div class="sheet-backdrop-mask" id="sheet-mask-markers" onclick="dismissAllSheets()">
+    <div class="sheet-content-dialog" onclick="event.stopPropagation()">
+      <div class="sheet-top-strip">
+        <span class="sheet-title-text">Track Markers</span>
+        <button class="btn-action-tap" onclick="dismissAllSheets()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-scroll-body" id="markers-list-container">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. IN-PLACE TAG EDITOR MODAL -->
   <div class="sheet-backdrop-mask" id="sheet-mask-tageditor" onclick="dismissAllSheets()">
     <div class="sheet-content-dialog" onclick="event.stopPropagation()">
       <div class="sheet-top-strip">
@@ -2237,7 +2448,10 @@ let state = {
     active: false,
     remainingSeconds: 0,
     timerId: null
-  }
+  },
+  markers: {}, // { [songId]: [{ id, time, label }] }
+  editingMarkerTrackId: null,
+  swipeHintShown: false,
 };
 
 let cachedCanvas = {
@@ -2319,6 +2533,10 @@ function loadPersistedData() {
       state.settings = { ...state.settings, ...JSON.parse(settings) };
       applyPersistedSettings();
     }
+    const markers = localStorage.getItem("daddyamp_markers");
+    if (markers) {
+      try { state.markers = JSON.parse(markers); } catch (e) {}
+    }
   } catch (e) {}
 }
 
@@ -2329,6 +2547,7 @@ function persistState() {
     const likedIds = state.songs.filter(s => s.favorite).map(s => s.id);
     localStorage.setItem("daddyamp_liked_ids", JSON.stringify(likedIds));
     localStorage.setItem("daddyamp_user_settings", JSON.stringify(state.settings));
+    localStorage.setItem("daddyamp_markers", JSON.stringify(state.markers));
   } catch (e) {}
 }
 
@@ -2472,6 +2691,27 @@ function drawPowerampScrubber(forceRedraw = false) {
     ctx.fill();
   }
 
+  // Draw track marker dots
+  const markers = getMarkersForCurrentTrack();
+  markers.forEach(m => {
+    if (state.duration <= 0) return;
+    const ratio = Math.max(0, Math.min(1, m.time / state.duration));
+    const x = left + ratio * usableWidth;
+    
+    ctx.save();
+    // Diamond shape
+    ctx.fillStyle = "rgba(255, 51, 102, 0.9)";
+    ctx.beginPath();
+    const ds = 4.5;
+    ctx.moveTo(x, centerY - ds);
+    ctx.lineTo(x + ds * 0.7, centerY);
+    ctx.lineTo(x, centerY + ds);
+    ctx.lineTo(x - ds * 0.7, centerY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  });
+
   ctx.globalAlpha = 1.0;
 }
 
@@ -2529,6 +2769,15 @@ function loadTrack(index, autoPlay = true) {
   document.getElementById("mini-meta-title").textContent = song.title;
   document.getElementById("mini-meta-artist").textContent = song.artist;
   document.getElementById("mini-thumb-img").src = song.artwork || "artwork/default.png";
+  
+  // Show format chip on mini player
+  const ext = (song.path || "").split(".").pop().toUpperCase();
+  const formatMap = { "WAV": "WAV", "FLAC": "FLAC", "MP3": "MP3", "M4A": "AAC", "OGG": "OGG", "OPUS": "OPUS" };
+  const chip = document.getElementById("mini-format-chip");
+  if (chip) {
+    chip.textContent = formatMap[ext] || (ext.length > 4 ? ext.substring(0,4) : ext);
+    chip.classList.add("visible");
+  }
 
   document.getElementById("player-song-title").textContent = song.title;
   document.getElementById("player-song-artist").textContent = `${song.artist} • ${song.album}`;
@@ -3571,17 +3820,29 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
 
   if (tracks.length === 0) {
     target.innerHTML = `
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; text-align: center; gap: 12px;">
-        <svg class="icon" style="width: 40px; height: 40px; color: var(--text-tertiary);" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-        <div style="font-size: 14px; font-weight: 700; color: var(--text-pure);">${emptyMsg}</div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+      <div class="empty-state-craft">
+        <svg class="empty-state-illustration" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+          <circle cx="60" cy="60" r="38" stroke="rgba(255,255,255,0.07)" stroke-width="1.5"/>
+          <circle cx="60" cy="60" r="24" stroke="rgba(255,255,255,0.09)" stroke-width="1.5"/>
+          <circle cx="60" cy="60" r="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+          <path d="M84 48 Q90 42, 84 36" stroke="rgba(0,229,255,0.35)" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <path d="M89 54 Q97 46, 89 38" stroke="rgba(0,229,255,0.22)" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <path d="M92 60 Q102 48, 92 36" stroke="rgba(0,229,255,0.12)" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <path d="M36 48 Q30 42, 36 36" stroke="rgba(0,229,255,0.35)" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <path d="M31 54 Q23 46, 31 38" stroke="rgba(0,229,255,0.22)" stroke-width="2" stroke-linecap="round" fill="none"/>
+          <path d="M28 60 Q18 48, 28 36" stroke="rgba(0,229,255,0.12)" stroke-width="2" stroke-linecap="round" fill="none"/>
+        </svg>
+        <div class="empty-state-headline">${emptyMsg || "Your library is empty"}</div>
+        <div class="empty-state-sub">Import audio files or scan your device to start listening</div>
+        <div class="empty-state-ctas">
           <button class="btn-import-header" onclick="invokeAudioImport()">
             <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Import Audio Files
+            Import Files
           </button>
-          <button class="btn-import-header" onclick="invokeDeviceScan()">
+          <button class="btn-import-header" style="background: var(--accent-soft); border-color: var(--border-active);" onclick="invokeDeviceScan()">
             <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            Scan Device Audio
+            Scan Device
           </button>
         </div>
       </div>
@@ -3592,11 +3853,16 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
   const listEl = document.createElement("div");
   listEl.className = "song-rows-catalog";
 
+  // Track row index for staggered animation
+  let rowIndex = 0;
+
   tracks.forEach(s => {
     const isPlayingThis = state.songs[state.currentIndex]?.id === s.id;
     const row = document.createElement("div");
     row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
     row.dataset.songId = s.id;
+    row.style.animationDelay = `${Math.min(rowIndex * 12, 480)}ms`;
+    rowIndex++;
     const ext = (s.path || "").split(".").pop().toUpperCase();
     const formatLabel = (ext === "WAV" || ext === "FLAC" || ext === "MP3" || ext === "M4A") ? ext : "AUDIO";
 
@@ -3710,6 +3976,7 @@ function renderAlbumDetailView(albumName, list) {
     const row = document.createElement("div");
     row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
     row.dataset.songId = s.id;
+    row.style.animationDelay = `${Math.min(idx * 12, 480)}ms`;
     row.innerHTML = `
       <span style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); width: 22px; text-align: center;">${idx + 1 < 10 ? '0' : ''}${idx + 1}</span>
       <div class="row-meta-content">
@@ -4292,6 +4559,206 @@ function applyDspPreset(name) {
 /* =========================================================================
    MEDIA SESSION INTEGRATION
    ========================================================================= */
+
+/* =========================================================================
+   MINI PLAYER SWIPE GESTURES
+   ========================================================================= */
+let miniSwipeStartX = 0;
+let miniSwipeTracking = false;
+let miniSwipeAccumDelta = 0;
+const MINI_SWIPE_THRESHOLD = 55;
+
+function miniSwipeStart(e) {
+  const touch = e.touches ? e.touches[0] : e;
+  miniSwipeStartX = touch.clientX;
+  miniSwipeTracking = false;
+  miniSwipeAccumDelta = 0;
+}
+
+function miniSwipeMove(e) {
+  if (!e.touches) return;
+  const touch = e.touches[0];
+  const dx = touch.clientX - miniSwipeStartX;
+  
+  if (!miniSwipeTracking && Math.abs(dx) > 8) {
+    miniSwipeTracking = true;
+  }
+  
+  if (miniSwipeTracking) {
+    e.preventDefault();
+    miniSwipeAccumDelta += dx;
+    const player = document.getElementById("docked-mini-player");
+    const clamped = Math.max(-55, Math.min(55, miniSwipeAccumDelta * 0.35));
+    player.style.transform = `translateX(${clamped}px)`;
+    player.style.transition = "none";
+    
+    // Show hint on first interaction
+    if (!state.swipeHintShown) {
+      const hint = document.getElementById("mini-swipe-hint");
+      if (hint) {
+        hint.classList.add("visible");
+        setTimeout(() => { hint.classList.remove("visible"); }, 2000);
+      }
+      state.swipeHintShown = true;
+    }
+  }
+}
+
+function miniSwipeEnd(e) {
+  const player = document.getElementById("docked-mini-player");
+  player.style.transition = "transform 0.18s ease-out";
+  player.style.transform = "translateX(0)";
+  
+  setTimeout(() => { player.style.transition = ""; }, 200);
+  
+  if (miniSwipeTracking && Math.abs(miniSwipeAccumDelta) > MINI_SWIPE_THRESHOLD) {
+    if (miniSwipeAccumDelta < 0) {
+      executePlayNext();
+    } else {
+      executePlayPrevious();
+    }
+  }
+  
+  miniSwipeTracking = false;
+  miniSwipeAccumDelta = 0;
+}
+
+/* =========================================================================
+   PULL-TO-REFRESH ON LIBRARY
+   ========================================================================= */
+let pullStartY = 0;
+let pullPulling = false;
+const PULL_THRESHOLD = 72;
+
+const libScroll = document.getElementById("library-scroll-container");
+
+if (libScroll) {
+  libScroll.addEventListener("touchstart", e => {
+    if (libScroll.scrollTop === 0) {
+      pullStartY = e.touches ? e.touches[0].clientY : 0;
+      pullPulling = true;
+    }
+  }, { passive: true });
+
+  libScroll.addEventListener("touchmove", e => {
+    if (!pullPulling || libScroll.scrollTop > 0) return;
+    const dy = (e.touches ? e.touches[0].clientY : 0) - pullStartY;
+    if (dy > 0) {
+      e.preventDefault();
+      const indicator = document.getElementById("pull-indicator");
+      if (indicator) {
+        const progress = Math.min(dy / PULL_THRESHOLD, 1.5);
+        indicator.style.opacity = Math.min(progress, 1);
+        indicator.classList.add("visible");
+      }
+    }
+  }, { passive: false });
+
+  libScroll.addEventListener("touchend", e => {
+    if (!pullPulling) return;
+    const dy = (e.changedTouches ? e.changedTouches[0].clientY : 0) - pullStartY;
+    const indicator = document.getElementById("pull-indicator");
+    
+    if (dy > PULL_THRESHOLD) {
+      if (indicator) {
+        const svg = indicator.querySelector("svg");
+        if (svg) svg.style.animation = "pullArrowBounce 0.25s ease-in-out infinite alternate";
+      }
+      invokeDeviceScan();
+      setTimeout(() => {
+        if (indicator) {
+          indicator.classList.remove("visible");
+          indicator.style.opacity = "0";
+          const svg = indicator.querySelector("svg");
+          if (svg) svg.style.animation = "";
+        }
+      }, 1800);
+    } else if (indicator) {
+      indicator.classList.remove("visible");
+    }
+    
+    pullPulling = false;
+  }, { passive: true });
+}
+
+/* =========================================================================
+   TRACK MARKERS / BOOKMARKS
+   ========================================================================= */
+
+function addMarkerAtCurrentPosition() {
+  const song = state.songs[state.currentIndex];
+  if (!song) return;
+  
+  const time = state.currentTime;
+  const markerId = "m_" + Date.now();
+  const label = prompt("Bookmark label (optional):", `Moment @ ${formatDuration(time)}`);
+  if (label === null) return;
+  
+  if (!state.markers[song.id]) state.markers[song.id] = [];
+  state.markers[song.id].push({ id: markerId, time, label: label || formatDuration(time) });
+  state.markers[song.id].sort((a, b) => a.time - b.time);
+  persistState();
+  
+  drawPowerampScrubber(true);
+  displayToast("Bookmark saved: " + (label || formatDuration(time)));
+}
+
+function removeMarker(songId, markerId) {
+  if (!state.markers[songId]) return;
+  state.markers[songId] = state.markers[songId].filter(m => m.id !== markerId);
+  if (state.markers[songId].length === 0) delete state.markers[songId];
+  persistState();
+  drawPowerampScrubber(true);
+}
+
+function seekToMarker(songId, markerTime) {
+  state.currentTime = markerTime;
+  commitSeek();
+}
+
+function getMarkersForCurrentTrack() {
+  const song = state.songs[state.currentIndex];
+  if (!song) return [];
+  return state.markers[song.id] || [];
+}
+
+function showMarkersSheet() {
+  dismissAllSheets();
+  renderMarkersList();
+  document.getElementById("sheet-mask-markers").classList.add("open");
+}
+
+function renderMarkersList() {
+  const container = document.getElementById("markers-list-container");
+  if (!container) return;
+  const markers = getMarkersForCurrentTrack();
+  const song = state.songs[state.currentIndex];
+  
+  if (markers.length === 0) {
+    container.innerHTML = `
+      <div style="padding: 28px 0; text-align: center; color: var(--text-tertiary); font-size: 12px; line-height: 1.75;">
+        <div style="margin-bottom: 8px;">
+          <svg class="icon" style="width: 32px; height: 32px; opacity: 0.4;" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        No bookmarks for this track yet.<br>
+        Tap the bookmark icon in the player<br>to save important moments.
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = markers.map(m => `
+    <div class="song-catalog-row" style="cursor: pointer;" onclick="seekToMarker(${song?.id}, ${m.time}); dismissAllSheets();">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <div style="font-size: 13px; font-weight: 650; color: var(--text-pure);">${escHtml(m.label)}</div>
+        <div style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary);">${formatDuration(m.time)}</div>
+      </div>
+      <button class="btn-action-tap" style="margin-left: auto;" onclick="event.stopPropagation(); removeMarker(${song?.id}, '${m.id}'); renderMarkersList();">
+        <svg class="icon icon-sm" style="color: #FF5A5A;" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+  `).join("");
+}
 
 function setupMediaSessionIntegration() {
   if ("mediaSession" in navigator) {
