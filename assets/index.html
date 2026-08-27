@@ -1872,11 +1872,309 @@ input:checked + .toggle-slider-bar::before {
 .marker-dot:hover {
   transform: translateY(-50%) scale(1.3);
 }
+
+/* =========================================================================
+   POWERAMP FLUID REDESIGN — token layer, living wallpaper, glass chrome,
+   motion system, press states, a11y. Appended overrides (win by cascade).
+   ========================================================================= */
+
+/* ---- Motion & material tokens (design system) ---- */
+:root {
+  --void: #050506;
+  --surface-0: #0C0C0E;
+  --surface-1: #141418;
+  --surface-2: #1C1C22;
+  --glass: rgba(12, 12, 16, 0.62);
+  --glass-strong: rgba(13, 13, 17, 0.82);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --text-primary: #F2F2F5;
+  --text-secondary-64: rgba(255, 255, 255, 0.62);
+  --text-tertiary-38: rgba(255, 255, 255, 0.38);
+  --ambient-blur: 48px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-hero: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --dur-micro: 90ms;
+  --dur-ui: 180ms;
+  --dur-sheet: 380ms;
+  --dur-hero: 420ms;
+  --dur-ambient: 600ms;
+
+  /* OLED ladder (light-touch: keep var names, new values) */
+  --bg-abyss: #050506;
+  --surface-base: rgba(12, 12, 14, 0.72);
+  --surface-panel: rgba(20, 20, 24, 0.86);
+  --surface-card: rgba(28, 28, 34, 0.9);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.13);
+  --text-pure: #F2F2F5;
+  --text-secondary: rgba(255, 255, 255, 0.62);
+  --text-tertiary: rgba(255, 255, 255, 0.38);
+  --accent: #6BD6F1;
+  --accent-soft: rgba(107, 214, 241, 0.14);
+  --accent-glow: rgba(107, 214, 241, 0.28);
+  --accent-ambient: rgba(107, 214, 241, 0.08);
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 26px;
+}
+
+body, html { background: var(--void); }
+#daddyamp-root { position: relative; z-index: 1; }
+
+/* ---- Living wallpaper (blurred album art behind everything) ---- */
+#ambient-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--void);
+}
+.ambient-img {
+  position: absolute;
+  inset: -10%;
+  width: 120%;
+  height: 120%;
+  object-fit: cover;
+  filter: blur(var(--ambient-blur)) saturate(1.12);
+  transform: scale(1.1);
+  opacity: 0;
+  transition: opacity var(--dur-ambient) ease;
+  will-change: opacity;
+}
+.ambient-img.front { opacity: 1; }
+.ambient-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(5, 5, 6, 0.58) 0%, rgba(5, 5, 6, 0.72) 62%, rgba(5, 5, 6, 0.86) 100%);
+}
+.ambient-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 18%, transparent 42%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+/* ---- Glass chrome ---- */
+#daddyamp-header {
+  background: rgba(10, 10, 13, 0.55);
+  backdrop-filter: blur(22px) saturate(1.25);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  border-bottom: 1px solid var(--hairline);
+}
+#library-subnav-bar {
+  background: rgba(12, 12, 15, 0.5);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+}
+#library-scroll-container {
+  background: rgba(8, 9, 11, 0.52);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
+}
+
+/* Mini player: glass bar with hairline, radius on top corners */
+#docked-mini-player {
+  height: 66px;
+  background: var(--glass);
+  backdrop-filter: blur(26px) saturate(1.3);
+  -webkit-backdrop-filter: blur(26px) saturate(1.3);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px 18px 0 0;
+  overflow: hidden;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.45);
+}
+.mini-cover-thumb { border-radius: 10px; }
+.mini-master-play-btn {
+  width: 42px;
+  height: 42px;
+  box-shadow: 0 4px 14px var(--accent-glow);
+}
+.mini-swipe-hint { bottom: 74px; z-index: 81; }
+
+/* Bottom nav: 4 destinations, glass, always visible */
+#docked-bottom-nav {
+  height: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(8, 8, 10, 0.72);
+  backdrop-filter: blur(28px) saturate(1.3);
+  -webkit-backdrop-filter: blur(28px) saturate(1.3);
+  border-top: 1px solid var(--hairline);
+}
+.nav-bottom-tab {
+  transition: color var(--dur-ui) var(--ease-out), transform var(--dur-micro) ease;
+}
+.nav-bottom-tab:active { transform: scale(0.92); }
+.nav-bottom-tab.active {
+  color: var(--accent);
+}
+
+/* ---- Spring sheets ---- */
+.sheet-backdrop-mask {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.sheet-content-dialog {
+  background: var(--glass-strong);
+  backdrop-filter: blur(34px) saturate(1.25);
+  -webkit-backdrop-filter: blur(34px) saturate(1.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+  box-shadow: 0 -14px 50px rgba(0, 0, 0, 0.6);
+  animation: sheetRiseAnim var(--dur-sheet) var(--ease-out);
+}
+
+/* ---- Player: art-driven hero, glass deck, scrim ---- */
+#full-player-screen {
+  background: transparent;
+}
+#full-player-screen::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 46%;
+  background: linear-gradient(180deg, transparent 0%, rgba(5, 5, 6, 0.55) 55%, rgba(5, 5, 6, 0.85) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+.player-ambient-glow { opacity: 0.6; }
+.player-bottom-deck {
+  background: linear-gradient(180deg, rgba(11, 11, 14, 0.08) 0%, rgba(10, 10, 13, 0.6) 40%, rgba(7, 7, 9, 0.9) 100%);
+  backdrop-filter: blur(26px) saturate(1.2);
+  -webkit-backdrop-filter: blur(26px) saturate(1.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+.artwork-frame-box {
+  max-width: min(340px, 80vw);
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+.artwork-main-img { will-change: transform, opacity; }
+
+/* Track-change motion: art morph + text rise */
+@keyframes artMorphIn {
+  from { transform: scale(1.06); opacity: 0.3; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.art-enter { animation: artMorphIn var(--dur-hero) var(--ease-hero); }
+@keyframes textRise {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.text-enter { animation: textRise 0.32s var(--ease-out); }
+
+/* Stage transitions (display toggles restart animation) */
+@keyframes stageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+#stage-artwork-view, #stage-lyrics-view, #stage-queue-view, #stage-specs-view, #stage-viz-view {
+  animation: stageIn 0.32s var(--ease-out);
+}
+
+/* ---- Play/pause morph (triangle <-> pause bars) ---- */
+.morph-layer {
+  fill: currentColor;
+  transform-origin: center;
+  transition: opacity var(--dur-micro) ease-out, transform var(--dur-ui) var(--ease-out);
+}
+.m-pause { opacity: 0; transform: scale(0.5); }
+.is-playing .m-play { opacity: 0; transform: scale(0.5); }
+.is-playing .m-pause { opacity: 1; transform: scale(1); }
+
+/* Giant play button */
+.play-pause-huge-btn {
+  width: 68px;
+  height: 68px;
+  box-shadow: 0 10px 34px var(--accent-glow), 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform var(--dur-micro) ease-out, box-shadow var(--dur-ui) ease;
+}
+.play-pause-huge-btn:active { transform: scale(0.92); }
+.transport-btn-round { transition: transform var(--dur-micro) ease-out, color var(--dur-ui) ease; }
+.transport-btn-round:active { transform: scale(0.9); }
+
+/* Press states everywhere (44px+ targets kept) */
+.btn-action-tap, .btn-import-header, .stage-pill-btn, .subnav-tab-item, .viz-mode-pill,
+.theme-swatch-btn, .action-menu-row, .btn-inline-heart, .btn-timer-preset {
+  transition: transform var(--dur-micro) ease-out, background var(--dur-ui) ease, color var(--dur-ui) ease, border-color var(--dur-ui) ease;
+}
+.btn-action-tap:active, .btn-import-header:active, .stage-pill-btn:active,
+.subnav-tab-item:active, .viz-mode-pill:active, .theme-swatch-btn:active,
+.action-menu-row:active, .btn-inline-heart:active {
+  transform: scale(0.94);
+}
+
+/* Pill chips (subnav + stage + mode pills) */
+.subnav-tab-item, .stage-pill-btn, .viz-mode-pill { border-radius: 999px; }
+
+/* ---- Typography: hero title, tabular timecodes ---- */
+.deck-title-main {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+.deck-artist-sub { font-size: 14px; font-weight: 500; }
+#player-time-elapsed, #player-time-remaining, .row-duration-digits, .deck-time-row,
+#player-specs-chip, .catalog-stats-banner, .player-audio-tech-chip {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Lyrics: active line breathes ---- */
+.lyric-stream-line { transition: transform var(--dur-ui) var(--ease-out), color var(--dur-ui) ease; }
+.lyric-stream-line.active-sync {
+  color: var(--accent) !important;
+  transform: scale(1.04);
+}
+
+/* ---- EQ band stagger on preset change ---- */
+@keyframes eqBandIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.eq-vertical-strip.eq-anim .eq-band-col { animation: eqBandIn 0.3s var(--ease-out) both; }
+.eq-vertical-strip.eq-anim .eq-band-col:nth-child(2) { animation-delay: 40ms; }
+.eq-vertical-strip.eq-anim .eq-band-col:nth-child(3) { animation-delay: 80ms; }
+.eq-vertical-strip.eq-anim .eq-band-col:nth-child(4) { animation-delay: 120ms; }
+.eq-vertical-strip.eq-anim .eq-band-col:nth-child(5) { animation-delay: 160ms; }
+
+/* ---- Accessibility: reduce motion (OS + in-app toggle) ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001s !important;
+  }
+  .song-catalog-row { animation: none !important; }
+}
+html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after {
+  animation-duration: 0.001s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001s !important;
+}
+html.reduce-motion .song-catalog-row { animation: none !important; }
+html.reduce-motion #full-player-screen { transition-duration: 0.001s !important; }
+
 </style>
 </head>
 <body>
 
 <div id="daddyamp-root">
+  <!-- LIVING WALLPAPER: blurred album art behind everything -->
+  <div id="ambient-layer" aria-hidden="true">
+    <img class="ambient-img" id="ambient-img-a" alt="">
+    <img class="ambient-img" id="ambient-img-b" alt="">
+    <div class="ambient-scrim"></div>
+    <div class="ambient-vignette"></div>
+  </div>
+
   <!-- Grain texture overlay for premium tactile feel -->
   <div class="grain-overlay"></div>
 
@@ -2037,10 +2335,6 @@ input:checked + .toggle-slider-bar::before {
     <button class="nav-bottom-tab" id="bnav-tab-player" onclick="expandNowPlayingScreen()">
       <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
       <span>Player</span>
-    </button>
-    <button class="nav-bottom-tab" id="bnav-tab-queue" onclick="showQueueSheet()">
-      <svg class="icon icon-md" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      <span>Queue</span>
     </button>
     <button class="nav-bottom-tab" id="bnav-tab-equalizer" onclick="showEqualizerSheet()">
       <svg class="icon icon-md" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
@@ -2465,6 +2759,34 @@ input:checked + .toggle-slider-bar::before {
         </div>
 
         <div class="settings-section-block">
+          <div class="settings-section-tag">Look &amp; Feel</div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Seek Bar Style</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Waveform bars or a clean line</div>
+            </div>
+          </div>
+          <div id="seekstyle-pill-row" style="display: flex; gap: 6px; padding: 0 14px 12px 14px;"></div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Background Blur</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Intensity of the album-art wallpaper</div>
+            </div>
+          </div>
+          <div id="blur-pill-row" style="display: flex; gap: 6px; padding: 0 14px 12px 14px;"></div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Reduce Motion</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Minimize animations for calm or motion-sensitive use</div>
+            </div>
+            <label class="toggle-switch-unit">
+              <input type="checkbox" id="toggle-reduce-motion" onchange="toggleReduceMotion()">
+              <span class="toggle-slider-bar"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-section-block">
           <div class="settings-section-tag">Statistics</div>
           <div class="setting-card-item">
             <div>
@@ -2718,7 +3040,10 @@ let state = {
     autoQueue: true,
     tempo: 1.0,
     theme: "abyss",
-    crossfadeSec: 0
+    crossfadeSec: 0,
+    seekStyle: "wave",
+    blurLevel: "med",
+    reduceMotion: false
   },
   sleepTimer: {
     active: false,
@@ -2761,8 +3086,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
   loadPersistedData();
   refreshBadges();
+  syncFluidSettingsUI();
   selectLibraryTab("tracks");
   loadTrack(state.currentIndex, false);
+  if (state.songs[state.currentIndex]) setAmbientArt(state.songs[state.currentIndex].artwork || "artwork/default.png", true);
 
   setInterval(syncPlaybackPosition, 100);
 
@@ -2861,6 +3188,8 @@ function applyPersistedSettings() {
   syncPlaybackSettingsUI();
   applyTempo(parseFloat(state.settings.tempo) || 1.0);
   applyTheme(state.settings.theme || "abyss");
+  applyBlurLevel(state.settings.blurLevel || "med");
+  syncFluidSettingsUI();
 }
 
 function refreshBadges() {
@@ -2904,17 +3233,6 @@ function setupCanvas() {
 }
 
 function getTrackPeaks(song, count) {
-  if (REAL_WAVEFORM_PEAKS[song.path]) {
-    const raw = REAL_WAVEFORM_PEAKS[song.path];
-    if (raw.length === count) return raw;
-    const res = [];
-    for (let i = 0; i < count; i++) {
-      const idx = Math.floor((i / count) * raw.length);
-      res.push(raw[idx]);
-    }
-    return res;
-  }
-
   // Deterministic acoustic signature hash based on duration, title and id
   const peaks = [];
   const seed = (song.id || 100) * 17 + (song.duration || 30);
@@ -2954,6 +3272,29 @@ function drawPowerampScrubber(forceRedraw = false) {
   const peaks = getTrackPeaks(currentSong, count);
   const centerY = height / 2.0;
 
+  // Seek style: 'line' mode renders a clean rounded seekbar and returns
+  if (state.settings.seekStyle === "line") {
+    const trackY = centerY;
+    const trackH = 4;
+    ctx.fillStyle = "rgba(255,255,255,0.14)";
+    appendRoundedRectPath(ctx, left, trackY - trackH / 2, usableWidth, trackH, trackH / 2);
+    ctx.fill();
+    ctx.fillStyle = state.palette.accent;
+    ctx.globalAlpha = 0.95;
+    appendRoundedRectPath(ctx, left, trackY - trackH / 2, Math.max(trackH, progressRatio * usableWidth), trackH, trackH / 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(markerX, trackY, 6.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(markerX, trackY, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = state.palette.accent;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    return;
+  }
+
   // Batch Path 1: Played Bars
   ctx.beginPath();
   for (let i = 0; i <= currentBarIdx && i < count; i++) {
@@ -2978,8 +3319,8 @@ function drawPowerampScrubber(forceRedraw = false) {
     const y = centerY - barHeight / 2.0;
     appendRoundedRectPath(ctx, x, y, barWidth, barHeight, 1);
   }
-  ctx.fillStyle = "#333E50";
-  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.globalAlpha = 1;
   ctx.fill();
 
   // Draw Position Marker
@@ -3139,6 +3480,12 @@ function loadTrack(index, autoPlay = true) {
   state.currentTime = 0;
   state.crossfadeTriggered = false;
   state.pendingSeekMs = song.cueOf ? (song.cueOf.start * 1000) : null;
+  setAmbientArt(song.artwork || "artwork/default.png");
+  retriggerAnim(document.getElementById("player-artwork-img"), "art-enter");
+  retriggerAnim(document.getElementById("player-song-title"), "text-enter");
+  retriggerAnim(document.getElementById("player-song-artist"), "text-enter");
+  retriggerAnim(document.getElementById("mini-meta-title"), "text-enter");
+  retriggerAnim(document.getElementById("mini-meta-artist"), "text-enter");
   updateTimerDisplays();
   updateHeartVisuals(song.favorite);
 
@@ -3224,16 +3571,16 @@ function togglePlayPauseState() {
 }
 
 function updatePlayButtonVisuals(playing) {
-  const miniPlaySvg = document.getElementById("mini-play-svg");
-  const masterPlaySvg = document.getElementById("master-play-svg");
-
-  if (playing) {
-    miniPlaySvg.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
-    masterPlaySvg.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
-  } else {
-    miniPlaySvg.innerHTML = '<polygon points="6 3 20 12 6 21 6 3"/>';
-    masterPlaySvg.innerHTML = '<polygon points="6 3 20 12 6 21 6 3"/>';
-  }
+  [["mini-play-btn", "mini-play-svg"], ["ctrl-play-btn", "master-play-svg"]].forEach(([btnId, svgId]) => {
+    const btn = document.getElementById(btnId);
+    const svgEl = document.getElementById(svgId);
+    if (!btn || !svgEl) return;
+    if (!svgEl.dataset.morph) {
+      svgEl.dataset.morph = "1";
+      svgEl.innerHTML = '<g class="morph-layer m-play"><polygon points="7 4.5 19.5 12 7 19.5 7 4.5"/></g><g class="morph-layer m-pause"><rect x="6.2" y="4.4" width="4" height="15.2" rx="1.4"/><rect x="13.8" y="4.4" width="4" height="15.2" rx="1.4"/></g>';
+    }
+    btn.classList.toggle("is-playing", !!playing);
+  });
 }
 
 function executePlayNext() {
@@ -3321,10 +3668,10 @@ function buildDynamicFill(limit = 12) {
 }
 
 const THEMES = {
-  abyss:  { label: "Dark Abyss",  bg: "#060709", base: "#0B0E14", panel: "#111520", card: "#151A28", accent: "#00E5FF", text: "#F8FAFC", text2: "#94A3B8", text3: "#526078", border: "rgba(255,255,255,0.07)", borderActive: "rgba(0,229,255,0.35)" },
-  ocean:  { label: "Ocean Depths", bg: "#04101A", base: "#071A28", panel: "#0B2436", card: "#0F2E42", accent: "#2DD4BF", text: "#E6F7F9", text2: "#8FB8C4", text3: "#4A7484", border: "rgba(255,255,255,0.08)", borderActive: "rgba(45,212,191,0.40)" },
-  forest: { label: "Forest Night", bg: "#04110B", base: "#072019", panel: "#0B2A20", card: "#0F3529", accent: "#4ADE80", text: "#EAF7EF", text2: "#93B8A2", text3: "#4C7260", border: "rgba(255,255,255,0.08)", borderActive: "rgba(74,222,128,0.40)" },
-  sunset: { label: "Sunset Pro",   bg: "#140508", base: "#1D0A10", panel: "#28121A", card: "#331A22", accent: "#FB7185", text: "#FBF0F1", text2: "#C39AA4", text3: "#7A5560", border: "rgba(255,255,255,0.08)", borderActive: "rgba(251,113,133,0.40)" }
+  abyss:  { label: "Dark Abyss",  bg: "#050506", base: "#0C0C0E", panel: "#141418", card: "#1C1C22", accent: "#6BD6F1", text: "#F2F2F5", text2: "rgba(255,255,255,0.62)", text3: "rgba(255,255,255,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(107,214,241,0.40)" },
+  ocean:  { label: "Ocean Depths", bg: "#061019", base: "#0B1A26", panel: "#12242F", card: "#182E3B", accent: "#5FC7D9", text: "#EAF5F7", text2: "rgba(234,245,247,0.62)", text3: "rgba(234,245,247,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(95,199,217,0.40)" },
+  forest: { label: "Forest Night", bg: "#05110B", base: "#0A1F17", panel: "#112A20", card: "#173327", accent: "#5FCC8A", text: "#EBF7F0", text2: "rgba(235,247,240,0.62)", text3: "rgba(235,247,240,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(95,204,138,0.40)" },
+  sunset: { label: "Sunset Pro",   bg: "#140508", base: "#1E0C10", panel: "#2A1319", card: "#361A20", accent: "#E88A71", text: "#FBEFEC", text2: "rgba(251,239,236,0.62)", text3: "rgba(251,239,236,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(232,138,113,0.40)" }
 };
 
 function hexToRgba(hex, a) {
@@ -3456,7 +3803,8 @@ function syncPlaybackPosition() {
   if (isAndroid) {
     const posMs = window.AndroidBridge.getCurrentPosition();
     const durMs = window.AndroidBridge.getDuration();
-    if (durMs > 0) state.duration = durMs / 1000;
+    const syncCur = state.songs[state.currentIndex];
+    if (durMs > 0 && !(syncCur && syncCur.cueOf)) state.duration = durMs / 1000;
     state.currentTime = posMs / 1000;
     noteListenTick();
     maybeTriggerCrossfade();
@@ -4188,10 +4536,12 @@ function moveQueueItemDown(idx) {
 
 function expandNowPlayingScreen() {
   document.getElementById("full-player-screen").classList.add("open");
+  heroArtExpand();
   setupCanvas();
 }
 
 function collapseNowPlayingScreen() {
+  heroArtCollapse();
   document.getElementById("full-player-screen").classList.remove("open");
 }
 
@@ -4955,6 +5305,184 @@ function renderHistoryTab() {
   holder.appendChild(listEl);
 }
 
+/* =========================================================================
+   POWERAMP FLUID UI ENGINE: ambient art, motion tokens, look & feel
+   ========================================================================= */
+
+const ambient = { a: null, b: null, front: 0, init: false };
+
+function ambientImages() {
+  if (!ambient.init) {
+    ambient.a = document.getElementById("ambient-img-a");
+    ambient.b = document.getElementById("ambient-img-b");
+    ambient.init = true;
+  }
+  return [ambient.a, ambient.b];
+}
+
+function setAmbientArt(url, instant) {
+  const imgs = ambientImages();
+  if (!imgs[0] || !imgs[1]) return;
+  const next = imgs[1 - ambient.front];
+  const cur = imgs[ambient.front];
+  if (!url) url = "artwork/default.png";
+  const apply = () => {
+    next.classList.add("front");
+    cur.classList.remove("front");
+    ambient.front = 1 - ambient.front;
+  };
+  if (instant) { next.onload = null; next.onerror = null; next.src = url; apply(); return; }
+  next.onload = apply;
+  next.onerror = () => { next.onerror = null; apply(); };
+  next.src = url;
+}
+
+function hexToHsl(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (mx + mn) / 2;
+  if (mx !== mn) {
+    const d = mx - mn;
+    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0));
+    else if (mx === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h /= 6;
+  }
+  return [h * 360, s * 100, l * 100];
+}
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; } else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+  const to2 = v => Math.round((v + m) * 255).toString(16).padStart(2, "0");
+  return "#" + to2(r) + to2(g) + to2(b);
+}
+// Desaturate 15-25% + cap luminance so art accents never neon-burn on OLED
+function desatAccent(hex) {
+  try {
+    const [h, s, l] = hexToHsl(hex);
+    return hslToHex(h, Math.round(Math.max(20, s * 0.76)), Math.min(62, l * 0.85 + 8));
+  } catch (e) { return hex; }
+}
+
+function prefersReducedMotion() {
+  return !!(state.settings.reduceMotion || (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches));
+}
+
+function applyReduceMotionClass() {
+  document.documentElement.classList.toggle("reduce-motion", prefersReducedMotion());
+}
+
+function retriggerAnim(el, cls) {
+  if (!el || prefersReducedMotion()) return;
+  try {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+  } catch (e) {}
+}
+
+// Hero shared-element: mini artwork -> full cover (and back)
+function heroArtExpand() {
+  const mini = document.getElementById("mini-thumb-img");
+  const hero = document.getElementById("player-artwork-img");
+  if (!mini || !hero || prefersReducedMotion()) return;
+  try {
+    const a = mini.getBoundingClientRect();
+    const b = hero.getBoundingClientRect();
+    const dx = (a.left + a.width / 2) - (b.left + b.width / 2);
+    const dy = (a.top + a.height / 2) - (b.top + b.height / 2);
+    const sc = a.width / b.width;
+    hero.style.transition = "none";
+    hero.style.transform = "translate(" + dx + "px, " + dy + "px) scale(" + sc + ")";
+    void hero.offsetWidth;
+    hero.style.transition = "transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+    hero.style.transform = "";
+  } catch (e) {}
+}
+
+function heroArtCollapse() {
+  const mini = document.getElementById("mini-thumb-img");
+  const hero = document.getElementById("player-artwork-img");
+  if (!mini || !hero || prefersReducedMotion()) return;
+  try {
+    const a = mini.getBoundingClientRect();
+    const b = hero.getBoundingClientRect();
+    const dx = (a.left + a.width / 2) - (b.left + b.width / 2);
+    const dy = (a.top + a.height / 2) - (b.top + b.height / 2);
+    const sc = a.width / b.width;
+    hero.style.transition = "transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1)";
+    hero.style.transform = "translate(" + dx + "px, " + dy + "px) scale(" + sc + ")";
+    setTimeout(() => { hero.style.transition = ""; hero.style.transform = ""; }, 460);
+  } catch (e) {}
+}
+
+// --- Look & Feel ---
+function applySeekStyle(style) {
+  state.settings.seekStyle = (style === "line") ? "line" : "wave";
+  saveAppOption("seekStyle", state.settings.seekStyle);
+  renderSeekStylePills();
+  setupCanvas();
+  if (state.settings.seekStyle === "line") displayToast("Seekbar style: line");
+  else displayToast("Seekbar style: waveform");
+}
+
+function renderSeekStylePills() {
+  const row = document.getElementById("seekstyle-pill-row");
+  if (!row) return;
+  row.innerHTML = "";
+  [["wave", "Waveform"], ["line", "Line"]].forEach(([v, label]) => {
+    const b = document.createElement("button");
+    b.className = "viz-mode-pill" + ((state.settings.seekStyle || "wave") === v ? " active" : "");
+    b.textContent = label;
+    b.onclick = () => applySeekStyle(v);
+    row.appendChild(b);
+  });
+}
+
+function applyBlurLevel(level) {
+  state.settings.blurLevel = level;
+  saveAppOption("blurLevel", level);
+  const px = level === "low" ? 24 : (level === "high" ? 72 : 48);
+  document.documentElement.style.setProperty("--ambient-blur", px + "px");
+  renderBlurPills();
+}
+
+function renderBlurPills() {
+  const row = document.getElementById("blur-pill-row");
+  if (!row) return;
+  row.innerHTML = "";
+  [["low", "Low"], ["med", "Med"], ["high", "High"]].forEach(([v, label]) => {
+    const b = document.createElement("button");
+    b.className = "viz-mode-pill" + ((state.settings.blurLevel || "med") === v ? " active" : "");
+    b.textContent = label;
+    b.onclick = () => applyBlurLevel(v);
+    row.appendChild(b);
+  });
+}
+
+function toggleReduceMotion() {
+  state.settings.reduceMotion = !state.settings.reduceMotion;
+  saveAppOption("reduceMotion", state.settings.reduceMotion);
+  applyReduceMotionClass();
+  displayToast(state.settings.reduceMotion ? "Reduced motion enabled" : "Full motion enabled");
+}
+
+function syncFluidSettingsUI() {
+  renderSeekStylePills();
+  renderBlurPills();
+  applyReduceMotionClass();
+  const rm = document.getElementById("toggle-reduce-motion");
+  if (rm) rm.checked = !!state.settings.reduceMotion;
+}
+
 function playFolderTracks(folderPath, shuffle) {
   const folders = buildFolderIndex();
   const list = (folders[folderPath] || []).map(e => e.song).sort(sortComparator(state.sortKey));
@@ -5020,7 +5548,7 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
     const row = document.createElement("div");
     row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
     row.dataset.songId = s.id;
-    row.style.animationDelay = `${Math.min(rowIndex * 12, 480)}ms`;
+    row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
     rowIndex++;
     const ext = (s.path || "").split(".").pop().toUpperCase();
     const formatLabel = s.virtual ? "CUE" : ((ext === "WAV" || ext === "FLAC" || ext === "MP3" || ext === "M4A") ? ext : "AUDIO");
@@ -5699,6 +6227,7 @@ function actionFetchOnlineArtwork() {
         s.artwork = highResArt;
         persistState();
         renderLibraryTab();
+        setAmbientArt(s.artwork || "artwork/default.png");
         if (state.songs[state.currentIndex]?.id === s.id) {
           document.getElementById("player-artwork-img").src = highResArt;
           document.getElementById("mini-thumb-img").src = highResArt;
@@ -5731,6 +6260,12 @@ function saveAppOption(k, v) {
 
 function applyDspPreset(name) {
   setDspPreset(name);
+  const strip = document.querySelector(".eq-vertical-strip");
+  if (strip) {
+    strip.classList.remove("eq-anim");
+    void strip.offsetWidth;
+    strip.classList.add("eq-anim");
+  }
 }
 
 /* =========================================================================
