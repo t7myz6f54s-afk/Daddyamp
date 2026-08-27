@@ -79,7 +79,7 @@ The script runs, in order:
 ## Verification Results
 
 - `aapt2 dump badging DaddyAmp.apk`
-  - package: `com.audify.music`, versionCode: `2`, versionName: `1.1`
+  - package: `com.audify.music`, versionCode: `4`, versionName: `1.3`
   - sdkVersion: `21`, targetSdkVersion: `34`
   - application-label: `DaddyAmp`
   - launchable-activity: `com.audify.music.MainActivity`
@@ -89,7 +89,7 @@ The script runs, in order:
   - Verified using v3 scheme (APK Signature Scheme v3): `true`
   - Signer #1 DN: `CN=Audify, OU=AudifyMusic, O=AudifyApp, L=Lahore, ST=Punjab, C=PK`
 - `zipalign -c 4 DaddyAmp.apk` → `Verification successful`
-- `unzip -l DaddyAmp.apk` → contains `AndroidManifest.xml`, `classes.dex`, `resources.arsc`, `assets/index.html`, bundled audio (`dreamwave.wav`, `cyberpunk.wav`, `stellar.wav`), and artwork (`default.png`, `dreamwave.png`, `cyberpunk.png`, `stellar.png`).
+- `unzip -l DaddyAmp.apk` → contains `AndroidManifest.xml`, `classes.dex`, `resources.arsc`, `assets/index.html`, bundled audio (`dreamwave.mp3`, `cyberpunk.mp3`, `stellar.mp3`), and artwork (`default.png`, `dreamwave.png`, `cyberpunk.png`, `stellar.png`).
 
 ## Master Craftsmanship & Engineering Highlights
 

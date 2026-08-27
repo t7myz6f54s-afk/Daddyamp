@@ -256,6 +256,7 @@ body, html {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .search-field-box {
@@ -1591,6 +1592,9 @@ input:checked + .toggle-slider-bar::before {
     <button class="subnav-tab-item" id="tab-btn-recent" onclick="selectLibraryTab('recent')">
       Recent
     </button>
+    <button class="subnav-tab-item" id="tab-btn-folders" onclick="selectLibraryTab('folders')">
+      Folders <span class="subnav-count-tag" id="tag-folders-count">0</span>
+    </button>
   </nav>
 
   <!-- SCROLLABLE LIBRARY MAIN VIEWPORT -->
@@ -1606,6 +1610,13 @@ input:checked + .toggle-slider-bar::before {
         </button>
       </div>
 
+      <button class="btn-import-header" id="sort-chip-btn" onclick="cycleSortKey()" title="Sort library">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"/></svg>
+        <span id="sort-chip-label">Title</span>
+      </button>
+      <button class="btn-import-header" id="sort-dir-btn" onclick="toggleSortDirection()" title="Sort direction (ascending/descending)">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7-7 7 7" id="sort-dir-arrow"/></svg>
+      </button>
       <button class="btn-import-header" onclick="invokeAudioImport()">
         <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Import
@@ -2192,6 +2203,9 @@ let state = {
   repeatMode: 0, // 0: off, 1: all, 2: one
   showRemainingTime: false,
   currentTab: "tracks",
+  sortKey: "title",       // title | artist | album | duration | year
+  sortDesc: false,
+  folderPath: null,       // open folder (null = folder root). Folders built from song.filePath
   playerCenterMode: "art", // art, lyrics, queue, specs
   currentTime: 0,
   duration: 32,
@@ -2333,6 +2347,10 @@ function refreshBadges() {
 
   const likedCount = state.songs.filter(s => s.favorite).length;
   document.getElementById("tag-liked-count").textContent = likedCount;
+
+  const foldersCount = folderNames().length;
+  const foldersTag = document.getElementById("tag-folders-count");
+  if (foldersTag) foldersTag.textContent = foldersCount;
 
   document.getElementById("summary-meta-line").textContent = `${state.songs.length} SONGS • DADDYAMP LOCAL LIBRARY`;
   document.getElementById("label-quick-meta").textContent = `${state.songs.length} TRACKS AVAILABLE`;
@@ -3222,9 +3240,14 @@ function collapseNowPlayingScreen() {
 
 function selectLibraryTab(tab) {
   state.currentTab = tab;
+  state.folderPath = null;
   document.querySelectorAll(".subnav-tab-item").forEach(t => t.classList.remove("active"));
   const tabEl = document.getElementById(`tab-btn-${tab}`);
   if (tabEl) tabEl.classList.add("active");
+
+  const sortable = (tab === "tracks" || tab === "folders");
+  document.getElementById("sort-chip-btn").style.display = sortable ? "inline-flex" : "none";
+  document.getElementById("sort-dir-btn").style.display = sortable ? "inline-flex" : "none";
 
   renderLibraryTab();
 }
@@ -3233,7 +3256,7 @@ function renderLibraryTab() {
   const tab = state.currentTab;
 
   if (tab === "tracks") {
-    renderSongsCatalog(state.songs);
+    renderSongsCatalog(applyCurrentSort([...state.songs]));
   } else if (tab === "albums") {
     renderAlbumCards();
   } else if (tab === "artists") {
@@ -3244,11 +3267,217 @@ function renderLibraryTab() {
   } else if (tab === "recent") {
     const rec = [...state.songs].sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
     renderSongsCatalog(rec);
+  } else if (tab === "folders") {
+    renderFolderBrowser();
   }
 }
 
-function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks in library") {
+/* =========================================================================
+   SORT ENGINE (Poweramp-style library sorting)
+   ========================================================================= */
+
+function sortComparator(key) {
+  const dir = state.sortDesc ? -1 : 1;
+  switch (key) {
+    case "artist":
+      return (a, b) => dir * String(a.artist || "~").localeCompare(String(b.artist || "~"));
+    case "album":
+      return (a, b) => dir * String(a.album || "~").localeCompare(String(b.album || "~"));
+    case "duration":
+      return (a, b) => dir * ((a.duration || 0) - (b.duration || 0));
+    case "year":
+      return (a, b) => dir * ((a.year || 0) - (b.year || 0));
+    case "title":
+    default:
+      return (a, b) => dir * String(a.title || "~").localeCompare(String(b.title || "~"));
+  }
+}
+
+function applyCurrentSort(list) {
+  return [...list].sort(sortComparator(state.sortKey));
+}
+
+const SORT_LABELS = { title: "Title", artist: "Artist", album: "Album", duration: "Length", year: "Year" };
+const SORT_KEYS = ["title", "artist", "album", "duration", "year"];
+
+function cycleSortKey() {
+  const next = SORT_KEYS[(SORT_KEYS.indexOf(state.sortKey) + 1) % SORT_KEYS.length];
+  state.sortKey = next;
+  updateSortChip();
+  renderLibraryTab();
+}
+
+function toggleSortDirection() {
+  state.sortDesc = !state.sortDesc;
+  updateSortChip();
+  renderLibraryTab();
+}
+
+function updateSortChip() {
+  const label = document.getElementById("sort-chip-label");
+  if (label) label.textContent = SORT_LABELS[state.sortKey] || "Title";
+  const arrow = document.getElementById("sort-dir-arrow");
+  if (arrow) {
+    arrow.setAttribute("d", state.sortDesc ? "M12 19V5M5 12l7-7 7 7" : "M12 5v14M5 12l7-7 7 7");
+  }
+}
+
+/* =========================================================================
+   FOLDERS BROWSER (Poweramp-style folder navigation)
+   ========================================================================= */
+
+function escHtml(str) {
+  return String(str == null ? "" : str)
+    .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+
+// Returns Map<dirPath, {dir: basename, paths: [{folder, base, path}], songs: [...] }>
+function buildFolderIndex() {
+  const folders = {};
+  state.songs.forEach(s => {
+    const fp = s.filePath || "";
+    const p = s.path || "";
+    let folder = "Library";
+    if (fp) {
+      // Real on-device path (from MediaStore scan): use its directory
+      const norm = fp.replace(/\\/g, "/");
+      const idx = norm.lastIndexOf("/");
+      folder = idx > 0 ? norm.substring(0, idx) : "/";
+    } else if (p.startsWith("audio/") || p.startsWith("assets/audio/")) {
+      // Bundled demo tracks packaged with the app
+      folder = "Bundled Audio";
+    } else if (s.imported) {
+      // Picker imports (SAF content URIs carry no filesystem path)
+      folder = "Imported Audio";
+    }
+    if (!folders[folder]) folders[folder] = [];
+    folders[folder].push({ song: s, file: fp ? fp.split("/").pop() : p.split("/").pop() });
+  });
+  return folders;
+}
+
+function folderNames() {
+  return Object.keys(buildFolderIndex()).sort((a, b) => a.localeCompare(b));
+}
+
+function dirBaseName(p) {
+  const norm = String(p || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  const idx = norm.lastIndexOf("/");
+  return idx >= 0 ? norm.substring(idx + 1) : norm;
+}
+
+function renderFolderBrowser() {
   const target = document.getElementById("library-render-target");
+  const folders = buildFolderIndex();
+
+  if (Object.keys(folders).length === 0) {
+    target.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; text-align: center; gap: 12px;">
+        <svg class="icon" style="width: 40px; height: 40px; color: var(--text-tertiary);" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <div style="font-size: 14px; font-weight: 700; color: var(--text-pure);">No folders indexed</div>
+        <div style="font-size: 12px; color: var(--text-tertiary); text-align: center; max-width: 300px;">
+          Scan your device or import audio files, then browse the on-device folder structure here.
+        </div>
+        <button class="btn-import-header" onclick="invokeDeviceScan()">Scan Device Audio</button>
+      </div>
+    `;
+    return;
+  }
+
+  // --- Open folder: track list with header actions ---
+  if (state.folderPath) {
+    const list = (folders[state.folderPath] || [])
+      .map(e => e.song)
+      .sort(sortComparator(state.sortKey));
+    const first = list[0] || {};
+    const totalSecs = list.reduce((acc, cur) => acc + (cur.duration || 0), 0);
+    const header = `
+      <div style="padding: 10px 14px 4px 14px;">
+        <button class="btn-import-header" style="height: 28px; padding: 0 10px; font-size: 11px;" onclick="state.folderPath = null; renderLibraryTab();">
+          <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg> All folders
+        </button>
+      </div>
+      <div class="drilldown-header-card">
+        <div class="drilldown-art-box">
+          <img src="${first.artwork || 'artwork/default.png'}" alt="${escHtml(dirBaseName(state.folderPath))}">
+        </div>
+        <div class="drilldown-info-col">
+          <div class="drilldown-main-title">${escHtml(dirBaseName(state.folderPath))}</div>
+          <div class="drilldown-sub-text">${list.length} tracks • ${formatDuration(totalSecs)}</div>
+        <div class="drilldown-buttons-row">
+          <button class="btn-import-header folder-play-all" style="height: 30px; padding: 0 10px; font-size: 11px;">
+            <svg class="icon icon-xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> Play All
+          </button>
+          <button class="btn-import-header folder-play-shuffle" style="height: 30px; padding: 0 10px; font-size: 11px;">
+            <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg> Shuffle
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="folder-tracks-holder"></div>
+    `;
+    target.innerHTML = header;
+    [["folder-play-all", false], ["folder-play-shuffle", true]].forEach(([cls, shuf]) => {
+      const btn = target.querySelector("." + cls);
+      if (btn) btn.onclick = () => playFolderTracks(state.folderPath, shuf);
+    });
+    renderSongsCatalog(list, "No tracks in this folder", document.getElementById("folder-tracks-holder"));
+    updateSortChip();
+    return;
+  }
+
+  // --- Folder root: grid of folders ---
+  target.innerHTML = `
+    <div class="drilldown-header-card" style="align-items: center;">
+      <div class="drilldown-info-col">
+        <div class="drilldown-main-title">Folders</div>
+        <div class="drilldown-sub-text">${Object.keys(folders).length} folders on this device</div>
+      </div>
+    </div>
+    <div class="album-cards-grid" id="folders-cards-container"></div>
+  `;
+  const grid = document.getElementById("folders-cards-container");
+  const keys = Object.keys(folders).sort((a, b) => a.localeCompare(b));
+  keys.forEach(path => {
+    const entries = folders[path];
+    const first = entries[0].song;
+    const card = document.createElement("div");
+    card.className = "album-unit-box";
+    card.style.cursor = "pointer";
+    card.innerHTML = `
+      <div class="album-thumb-container">
+        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escHtml(dirBaseName(path))}">
+      </div>
+      <div class="album-title-text">${escHtml(dirBaseName(path))}</div>
+      <div class="album-artist-text">${entries.length} tracks</div>
+    `;
+    card.onclick = () => { state.folderPath = path; renderLibraryTab(); };
+    grid.appendChild(card);
+  });
+  updateSortChip();
+}
+
+function playFolderTracks(folderPath, shuffle) {
+  const folders = buildFolderIndex();
+  const list = (folders[folderPath] || []).map(e => e.song).sort(sortComparator(state.sortKey));
+  if (list.length === 0) return;
+  let playList = list;
+  if (shuffle) {
+    playList = [...list];
+    for (let i = playList.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [playList[i], playList[j]] = [playList[j], playList[i]];
+    }
+  }
+  state.queue = [...playList];   // queue holds song objects (matches executePlayNext)
+  const idx = state.songs.findIndex(s => s.id === playList[0].id);
+  if (idx !== -1) loadTrack(idx, true);
+  displayToast(`Playing folder: ${dirBaseName(folderPath)}`);
+}
+
+function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks in library", targetEl = null) {
+  const target = targetEl || document.getElementById("library-render-target");
   target.innerHTML = "";
 
   if (tracks.length === 0) {
@@ -3625,18 +3854,24 @@ function invokeDeviceScan() {
     const scanned = JSON.parse(jsonStr);
     if (scanned && scanned.length > 0) {
       const merged = [...REALISTIC_COLLECTION];
-      scanned.forEach((ds, i) => {
+      scanned.forEach((ds) => {
         merged.push({
-          id: 5000 + i,
+          id: ds.id || (Date.now() + Math.floor(Math.random() * 10000)),
           title: ds.title,
           artist: ds.artist,
           album: ds.album,
-          genre: "Device",
-          year: 2026,
+          genre: ds.genre || "Device Audio",
+          year: ds.year || 2026,
           duration: ds.duration || 180,
+          bitrate: ds.bitrate || 0,
+          sampleRate: ds.sampleRate || 0,
+          mimeType: ds.mimeType || "audio/*",
           path: ds.path,
+          filePath: ds.filePath || "",
+          albumId: ds.albumId || 0,
           artwork: ds.artwork || "artwork/default.png",
           favorite: 0,
+          play_count: 0,
           lyrics: "",
           imported: true
         });

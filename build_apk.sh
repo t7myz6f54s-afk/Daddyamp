@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-PROJECT_DIR="/home/user/Projects/Audify"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_TOOLS="/home/user/android-sdk/build-tools/34.0.0"
 PLATFORM_JAR="/home/user/android-sdk/platforms/android-34/android.jar"
 KEYSTORE="$PROJECT_DIR/keystore/audify.keystore"
@@ -21,8 +21,8 @@ $SDK_TOOLS/aapt2 link -o "$TEMP_DIR/base.apk" \
   --java "$PROJECT_DIR/gen" \
   --min-sdk-version 21 \
   --target-sdk-version 34 \
-  --version-code 3 \
-  --version-name "1.2" \
+  --version-code 4 \
+  --version-name "1.3" \
   "$TEMP_DIR/compiled.zip"
 
 echo "3. Compiling Java sources..."
