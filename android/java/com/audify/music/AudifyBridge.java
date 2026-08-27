@@ -41,6 +41,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -946,40 +949,192 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     }
 
     @JavascriptInterface
-    public void updateMediaSession(String title, String artist, String album, long durationSec, String artworkPath, boolean playing, long positionSec) {
+    public void updateMediaSession(String title, String artist, String album, String albumArtist, String genre, long year, long durationSec, String artworkPath, boolean playing, long positionSec) {
+        try {
+            if (artworkPath != null && (artworkPath.startsWith("content://"))) {
+                applySessionMetadata(title, artist, album, albumArtist, genre, year, durationSec, decodeContentArt(artworkPath), playing, positionSec);
+            } else if (artworkPath != null && (artworkPath.startsWith("http://") || artworkPath.startsWith("https://"))) {
+                // apply immediately without art, fetch art on background thread
+                applySessionMetadata(title, artist, album, albumArtist, genre, year, durationSec, null, playing, positionSec);
+                final String artUrl = artworkPath;
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        final Bitmap bmp = downloadArtwork(artUrl);
+                        if (bmp != null) {
+                            activity.runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    applySessionMetadata(title, artist, album, albumArtist, genre, year, durationSec, bmp, playing, positionSec);
+                                }
+                            });
+                        }
+                    }
+                }).start();
+            } else {
+                applySessionMetadata(title, artist, album, albumArtist, genre, year, durationSec, decodeLocalArt(artworkPath), playing, positionSec);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Error updating MediaSession metadata: " + e.getMessage());
+        }
+    }
+
+    private void applySessionMetadata(String title, String artist, String album, String albumArtist, String genre, long year, long durationSec, Bitmap art, boolean playing, long positionSec) {
         if (mediaSession == null) return;
         try {
             MediaMetadata.Builder mb = new MediaMetadata.Builder();
             mb.putString(MediaMetadata.METADATA_KEY_TITLE, title);
             mb.putString(MediaMetadata.METADATA_KEY_ARTIST, artist);
             mb.putString(MediaMetadata.METADATA_KEY_ALBUM, album);
+            mb.putString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST, albumArtist);
+            if (genre != null && !genre.isEmpty()) mb.putString(MediaMetadata.METADATA_KEY_GENRE, genre);
+            if (year > 0) mb.putLong(MediaMetadata.METADATA_KEY_YEAR, year);
             mb.putLong(MediaMetadata.METADATA_KEY_DURATION, durationSec * 1000);
-
-            if (artworkPath != null && !artworkPath.isEmpty()) {
-                Bitmap bmp = null;
-                if (artworkPath.startsWith("data:image")) {
-                    int commaIdx = artworkPath.indexOf(',');
-                    if (commaIdx != -1) {
-                        byte[] decoded = Base64.decode(artworkPath.substring(commaIdx + 1), Base64.DEFAULT);
-                        bmp = BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
-                    }
-                } else if (artworkPath.startsWith("file:///android_asset/")) {
-                    String sub = artworkPath.substring("file:///android_asset/".length());
-                    InputStream is = activity.getAssets().open(sub);
-                    bmp = BitmapFactory.decodeStream(is);
-                    is.close();
+            if (art != null) {
+                Bitmap scaled = art;
+                if (Math.max(art.getWidth(), art.getHeight()) > 1024) {
+                    float r = 1024f / Math.max(art.getWidth(), art.getHeight());
+                    scaled = Bitmap.createScaledBitmap(art, (int) (art.getWidth() * r), (int) (art.getHeight() * r), true);
                 }
-                if (bmp != null) {
-                    mb.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp);
-                }
+                mb.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, scaled);
             }
             mediaSession.setMetadata(mb.build());
-
             int state = playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
             updatePlaybackState(state, positionSec * 1000, playing ? 1.0f : 0.0f);
+        } catch (Exception ignored) {}
+    }
+
+    private Bitmap decodeLocalArt(String artworkPath) {
+        try {
+            if (artworkPath == null || artworkPath.isEmpty()) return null;
+            if (artworkPath.startsWith("data:image")) {
+                int commaIdx = artworkPath.indexOf(',');
+                if (commaIdx != -1) {
+                    byte[] decoded = Base64.decode(artworkPath.substring(commaIdx + 1), Base64.DEFAULT);
+                    return BitmapFactory.decodeByteArray(decoded, 0, decoded.length);
+                }
+            } else if (artworkPath.startsWith("file:///android_asset/")) {
+                String sub = artworkPath.substring("file:///android_asset/".length());
+                InputStream is = activity.getAssets().open(sub);
+                Bitmap bmp = BitmapFactory.decodeStream(is);
+                is.close();
+                return bmp;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private Bitmap decodeContentArt(String artworkPath) {
+        try {
+            android.net.Uri uri = android.net.Uri.parse(artworkPath);
+            InputStream is = activity.getContentResolver().openInputStream(uri);
+            if (is == null) return null;
+            Bitmap bmp = BitmapFactory.decodeStream(is);
+            is.close();
+            return bmp;
         } catch (Exception e) {
-            Log.w(TAG, "Error updating MediaSession metadata: " + e.getMessage());
+            Log.w(TAG, "content art decode failed: " + e.getMessage());
+            return null;
         }
+    }
+
+    private Bitmap downloadArtwork(String url) {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setConnectTimeout(4000);
+            conn.setReadTimeout(6000);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android) DaddyAmp/1.7");
+            InputStream is = conn.getInputStream();
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) != -1) bos.write(buf, 0, n);
+            is.close();
+            byte[] data = bos.toByteArray();
+            if (data.length > 2 * 1024 * 1024) return null;
+            return BitmapFactory.decodeByteArray(data, 0, data.length);
+        } catch (Exception e) {
+            Log.w(TAG, "artwork download failed: " + e.getMessage());
+            return null;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    @JavascriptInterface
+    public boolean updateMediaStoreMetadata(String filePath, String title, String artist, String album, String genre, int year) {
+        try {
+            if (filePath == null || filePath.isEmpty()) return false;
+            android.content.ContentValues cv = new android.content.ContentValues();
+            if (title != null && !title.isEmpty()) cv.put(MediaStore.Audio.Media.TITLE, title);
+            if (artist != null && !artist.isEmpty()) cv.put(MediaStore.Audio.Media.ARTIST, artist);
+            if (album != null && !album.isEmpty()) cv.put(MediaStore.Audio.Media.ALBUM, album);
+            if (genre != null && !genre.isEmpty()) cv.put(MediaStore.Audio.Media.GENRE, genre);
+            if (year > 0) cv.put(MediaStore.Audio.Media.YEAR, year);
+            if (cv.size() == 0) return false;
+            int updated;
+            if (filePath.startsWith("content://")) {
+                updated = activity.getContentResolver().update(android.net.Uri.parse(filePath), cv, null, null);
+            } else {
+                updated = activity.getContentResolver().update(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, cv,
+                        MediaStore.Audio.Media.DATA + "=?",
+                        new String[]{ filePath });
+            }
+            return updated > 0;
+        } catch (Exception e) {
+            Log.w(TAG, "updateMediaStoreMetadata failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    @JavascriptInterface
+    public String scanCueSheets() {
+        org.json.JSONArray out = new org.json.JSONArray();
+        try {
+            String[] proj;
+            try {
+                proj = new String[]{ MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.RELATIVE_PATH };
+            } catch (Throwable t) {
+                proj = new String[]{ MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.DATA };
+            }
+            android.database.Cursor c = activity.getContentResolver().query(
+                    MediaStore.Files.getContentUri("external"),
+                    proj,
+                    MediaStore.MediaColumns.DISPLAY_NAME + " LIKE '%.cue' OR " + MediaStore.MediaColumns.DISPLAY_NAME + " LIKE '%.CUE'",
+                    null, null);
+            if (c == null) return out.toString();
+            while (c.moveToNext()) {
+                try {
+                    long id = c.getLong(c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID));
+                    String name = c.getString(c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME));
+                    String uri = MediaStore.Files.getContentUri("external") + "/" + id;
+                    // read text
+                    StringBuilder sb = new StringBuilder();
+                    InputStream is = activity.getContentResolver().openInputStream(android.net.Uri.parse(uri));
+                    if (is != null) {
+                        byte[] buf = new byte[8192];
+                        int total = 0, n;
+                        while ((n = is.read(buf)) != -1 && total < 512 * 1024) {
+                            sb.append(new String(buf, 0, n, "UTF-8"));
+                            total += n;
+                        }
+                        is.close();
+                    }
+                    org.json.JSONObject o = new org.json.JSONObject();
+                    o.put("name", name);
+                    o.put("uri", uri);
+                    o.put("text", sb.toString());
+                    out.put(o);
+                } catch (Exception ignored) {}
+            }
+            c.close();
+        } catch (Exception e) {
+            Log.w(TAG, "cue scan failed: " + e.getMessage());
+        }
+        return out.toString();
     }
 
     private void updatePlaybackState(int state, long positionMs, float speed) {

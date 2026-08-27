@@ -2646,6 +2646,11 @@ input:checked + .toggle-slider-bar::before {
           <input type="text" id="tag-edit-genre" placeholder="Synthwave, Ambient, Electronic..." style="width: 100%; background: #141A26; color: #FFF; border: 1px solid var(--border-subtle); border-radius: var(--radius-xs); padding: 8px 10px; font-size: 13px; outline: none;">
         </div>
 
+        <div class="setting-card-item" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+          <label style="font-size: 11px; color: var(--text-tertiary); font-weight: 700; text-transform: uppercase;">Year</label>
+          <input type="number" id="tag-edit-year" min="1900" max="2100" placeholder="2024" style="width: 100%; background: #141A26; color: #FFF; border: 1px solid var(--border-subtle); border-radius: var(--radius-xs); padding: 8px 10px; font-size: 13px; outline: none;">
+        </div>
+
         <button class="btn-import-header" style="width: 100%; justify-content: center; height: 40px; margin-top: 4px;" onclick="saveEditedTags()">
           Save Changes
         </button>
@@ -2690,6 +2695,7 @@ let state = {
   listenHistory: [],       // [{ ts, id, title, artist, dur }] newest-first
   vizMode: "bars",         // bars | wave | radial
   crossfadeTriggered: false,
+  pendingSeekMs: null,
   currentTime: 0,
   duration: 32,
   volume: 75,
@@ -2765,6 +2771,11 @@ window.addEventListener("DOMContentLoaded", () => {
       if (!state.isSeeking) {
         noteListenTick();
         state.currentTime = audioEl.currentTime;
+        const cueCur = state.songs[state.currentIndex];
+        if (cueCur && cueCur.cueOf && state.currentTime >= cueCur.cueOf.end) {
+          handleTrackFinished();
+          return;
+        }
         if (audioEl.duration && !isNaN(audioEl.duration)) {
           state.duration = audioEl.duration;
         }
@@ -2777,6 +2788,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
     audioEl.addEventListener("ended", () => {
       handleTrackFinished();
+    });
+
+    audioEl.addEventListener("loadedmetadata", () => {
+      const cueCur = state.songs[state.currentIndex];
+      if (cueCur && cueCur.cueOf && !isNaN(audioEl.duration)) {
+        audioEl.currentTime = cueCur.cueOf.start;
+      }
     });
   }
 
@@ -2821,7 +2839,7 @@ function loadPersistedData() {
 
 function persistState() {
   try {
-    const imported = state.songs.filter(s => s.imported);
+    const imported = state.songs.filter(s => s.imported && !s.virtual);
     localStorage.setItem("daddyamp_imported_songs", JSON.stringify(imported));
     const likedIds = state.songs.filter(s => s.favorite).map(s => s.id);
     localStorage.setItem("daddyamp_liked_ids", JSON.stringify(likedIds));
@@ -2846,9 +2864,10 @@ function applyPersistedSettings() {
 }
 
 function refreshBadges() {
-  document.getElementById("tag-tracks-count").textContent = state.songs.length;
+  const realTracks = state.songs.filter(s => !s.virtual);
+  document.getElementById("tag-tracks-count").textContent = realTracks.length;
   
-  const albums = new Set(state.songs.map(s => s.album));
+  const albums = new Set(realTracks.map(s => s.album));
   document.getElementById("tag-albums-count").textContent = albums.size;
 
   const artists = new Set(state.songs.map(s => s.artist));
@@ -2863,8 +2882,8 @@ function refreshBadges() {
   const listsTag = document.getElementById("tag-lists-count");
   if (listsTag) listsTag.textContent = state.playlists.length;
 
-  document.getElementById("summary-meta-line").textContent = `${state.songs.length} SONGS • DADDYAMP LOCAL LIBRARY`;
-  document.getElementById("label-quick-meta").textContent = `${state.songs.length} TRACKS AVAILABLE`;
+  document.getElementById("summary-meta-line").textContent = `${realTracks.length} SONGS • DADDYAMP LOCAL LIBRARY`;
+  document.getElementById("label-quick-meta").textContent = `${realTracks.length} TRACKS AVAILABLE`;
 }
 
 /* =========================================================================
@@ -3119,6 +3138,7 @@ function loadTrack(index, autoPlay = true) {
   state.duration = song.duration || 30;
   state.currentTime = 0;
   state.crossfadeTriggered = false;
+  state.pendingSeekMs = song.cueOf ? (song.cueOf.start * 1000) : null;
   updateTimerDisplays();
   updateHeartVisuals(song.favorite);
 
@@ -3440,6 +3460,11 @@ function syncPlaybackPosition() {
     state.currentTime = posMs / 1000;
     noteListenTick();
     maybeTriggerCrossfade();
+    const cueCur = state.songs[state.currentIndex];
+    if (cueCur && cueCur.cueOf && state.currentTime >= cueCur.cueOf.end) {
+      handleTrackFinished();
+      return;
+    }
     updateTimerDisplays();
     updateLyricsSync(state.currentTime);
     drawPowerampScrubber();
@@ -3998,6 +4023,7 @@ function drawVizFrame(t) {
 
 function maybeTriggerCrossfade() {
   if (!isAndroid || !state.settings.crossfadeSec || state.crossfadeTriggered || !state.isPlaying || state.repeatMode === 2) return;
+  if (state.songs[state.currentIndex] && state.songs[state.currentIndex].cueOf) return;
   const remain = state.duration - state.currentTime;
   if (remain > state.settings.crossfadeSec + 0.25 || remain <= 0 || state.duration < 8) return;
   if (!window.AndroidBridge.crossfadeAudio) return;
@@ -4191,16 +4217,16 @@ function renderLibraryTab() {
   const tab = state.currentTab;
 
   if (tab === "tracks") {
-    renderSongsCatalog(applyCurrentSort([...state.songs]));
+    renderSongsCatalog(applyCurrentSort(state.songs.filter(s => !s.virtual)));
   } else if (tab === "albums") {
     renderAlbumCards();
   } else if (tab === "artists") {
     renderArtistCards();
   } else if (tab === "liked") {
-    const liked = state.songs.filter(s => s.favorite);
+    const liked = state.songs.filter(s => s.favorite && !s.virtual);
     renderSongsCatalog(liked, "No favorite tracks yet. Tap heart to favorite songs.");
   } else if (tab === "recent") {
-    const rec = [...state.songs].sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
+    const rec = state.songs.filter(s => !s.virtual).sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
     renderSongsCatalog(rec);
   } else if (tab === "folders") {
     renderFolderBrowser();
@@ -4272,6 +4298,97 @@ function escHtml(str) {
 }
 
 // Returns Map<dirPath, {dir: basename, paths: [{folder, base, path}], songs: [...] }>
+/* =========================================================================
+   CUE SHEET SUPPORT (virtual split tracks)
+   ========================================================================= */
+
+function parseCueText(text, sheetName) {
+  const out = [];
+  if (!text) return out;
+  const lines = String(text).replace(/\r/g, "").split("\n");
+  let fileRef = null, cur = null;
+  const files = [];
+  const pushTrack = () => {
+    if (cur && cur.index != null) out.push(cur);
+    cur = null;
+  };
+  lines.forEach(raw => {
+    const line = raw.trim();
+    if (!line || line.startsWith(";") || line.startsWith("#")) return;
+    let m;
+    if ((m = line.match(/^FILE\s+(.+)/i))) {
+      const parts = m[1].trim().split(/\s+/).map(x => x.replace(/^"|"$/g, ""));
+      if (parts.length > 1 && /^(wav|wave|mp3|flac|ogg|m4a|aac|ape|wma|opus)$/i.test(parts[parts.length - 1])) parts.pop();
+      fileRef = parts.join(" ");
+    } else if ((m = line.match(/^TRACK\s+(\d+)/i))) {
+      pushTrack();
+      cur = { trackNo: parseInt(m[1], 10), title: "Track " + m[1], performer: "", index: null, file: fileRef, sheet: sheetName };
+    } else if ((m = line.match(/^TITLE\s+"?(.*?)"?$/i))) {
+      if (cur) cur.title = m[1].trim();
+      else if (!fileRef) fileRef = "unnamed";
+    } else if ((m = line.match(/^PERFORMER\s+"?(.*?)"?$/i))) {
+      if (cur) cur.performer = m[1].trim();
+    } else if ((m = line.match(/^INDEX\s+01\s+([\d:]+)/i))) {
+      if (cur) {
+        const t = m[1].split(":");
+        cur.index = (parseInt(t[0], 10) || 0) * 60 + (parseInt(t[1], 10) || 0);
+        if (t.length > 2) cur.index += Math.round((parseInt(t[2], 10) || 0) / 75);
+      }
+    }
+  });
+  pushTrack();
+  return out.filter(t => t.index != null && t.file);
+}
+
+function loadCueSheets() {
+  if (!isAndroid || !window.AndroidBridge.scanCueSheets) return 0;
+  let sheets = [];
+  try { sheets = JSON.parse(window.AndroidBridge.scanCueSheets()) || []; } catch (e) { return 0; }
+  if (!sheets.length) return 0;
+  let added = 0;
+  sheets.forEach(sheet => {
+    const tracks = parseCueText(sheet.text, sheet.name);
+    tracks.forEach(t => {
+      // match audio file referenced by the cue to an indexed song
+      const base = (t.file || "").split(/[\\/]/).pop().toLowerCase();
+      let src = state.songs.find(sd => !sd.virtual && (sd.filePath || "").toLowerCase().endsWith(base));
+      if (!src) {
+        src = state.songs.find(sd => !sd.virtual && (sd.path || "").toLowerCase().endsWith(base));
+      }
+      if (!src) return;
+      const start = t.index;
+      // end = next track's index in same sheet, else matched duration
+      let end = src.duration || start + 180;
+      const nxt = tracks.find(tt => tt.sheet === sheet.name && tt.index > start && tt.file === t.file);
+      if (nxt) end = nxt.index;
+      if (end <= start) end = start + 30;
+      const vId = 900000 + (sheet.uri || "").length * 7 + t.trackNo * 10 + Math.floor(start);
+      if (state.songs.some(sd => sd.id === vId)) return;
+      state.songs.push({
+        id: vId,
+        title: t.title || ("Track " + t.trackNo),
+        artist: t.performer || src.artist || "Various Artists",
+        album: sheet.name.replace(/\.cue$/i, ""),
+        genre: src.genre || "Cue Sheet",
+        year: src.year || 0,
+        duration: end - start,
+        path: src.path,
+        filePath: src.filePath || "",
+        artwork: src.artwork || "artwork/default.png",
+        favorite: 0,
+        play_count: 0,
+        lyrics: "",
+        imported: true,
+        virtual: true,
+        cueOf: { sheet: sheet.name, uri: sheet.uri, start: start, end: end }
+      });
+      added++;
+    });
+  });
+  if (added > 0) displayToast(`Indexed ${added} cue-sheet tracks`);
+  return added;
+}
+
 function buildFolderIndex() {
   const folders = {};
   state.songs.forEach(s => {
@@ -4906,7 +5023,7 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
     row.style.animationDelay = `${Math.min(rowIndex * 12, 480)}ms`;
     rowIndex++;
     const ext = (s.path || "").split(".").pop().toUpperCase();
-    const formatLabel = (ext === "WAV" || ext === "FLAC" || ext === "MP3" || ext === "M4A") ? ext : "AUDIO";
+    const formatLabel = s.virtual ? "CUE" : ((ext === "WAV" || ext === "FLAC" || ext === "MP3" || ext === "M4A") ? ext : "AUDIO");
 
     row.innerHTML = `
       <div class="row-artwork-frame">
@@ -4952,7 +5069,7 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
 function renderAlbumCards() {
   const target = document.getElementById("library-render-target");
   const albumMap = {};
-  state.songs.forEach(s => {
+  state.songs.filter(s => !s.virtual).forEach(s => {
     if (!albumMap[s.album]) albumMap[s.album] = [];
     albumMap[s.album].push(s);
   });
@@ -5062,7 +5179,7 @@ function playAlbumTracks(albumName, shuffle = false) {
 function renderArtistCards() {
   const target = document.getElementById("library-render-target");
   const artistMap = {};
-  state.songs.forEach(s => {
+  state.songs.filter(s => !s.virtual).forEach(s => {
     if (!artistMap[s.artist]) artistMap[s.artist] = [];
     artistMap[s.artist].push(s);
   });
@@ -5282,11 +5399,16 @@ function invokeDeviceScan() {
         });
       });
       state.songs = merged;
+      loadCueSheets();
       persistState();
       refreshBadges();
       renderLibraryTab();
       displayToast(`Indexed ${scanned.length} local audio files`);
     } else {
+      loadCueSheets();
+      persistState();
+      refreshBadges();
+      renderLibraryTab();
       displayToast("No new audio files discovered");
     }
   } else {
@@ -5530,6 +5652,7 @@ function actionOpenTagEditor() {
   document.getElementById("tag-edit-artist").value = s.artist || "";
   document.getElementById("tag-edit-album").value = s.album || "";
   document.getElementById("tag-edit-genre").value = s.genre || "";
+  document.getElementById("tag-edit-year").value = s.year || "";
   document.getElementById("sheet-mask-tageditor").classList.add("open");
 }
 
@@ -5540,15 +5663,26 @@ function saveEditedTags() {
   s.artist = document.getElementById("tag-edit-artist").value.trim() || s.artist;
   s.album = document.getElementById("tag-edit-album").value.trim() || s.album;
   s.genre = document.getElementById("tag-edit-genre").value.trim() || s.genre;
+  const yearVal = parseInt(document.getElementById("tag-edit-year").value, 10);
+  if (yearVal >= 1900 && yearVal <= 2100) s.year = yearVal;
 
   persistState();
   refreshBadges();
   renderLibraryTab();
   if (state.songs[state.currentIndex]?.id === s.id) {
     loadTrack(state.currentIndex, state.isPlaying);
+    updateMediaSession(state.songs[state.currentIndex]);
   }
   dismissAllSheets();
-  displayToast("Metadata tags saved");
+
+  // Best-effort write-back to the actual file's MediaStore metadata
+  if (isAndroid && s.filePath && window.AndroidBridge.updateMediaStoreMetadata) {
+    const ok = window.AndroidBridge.updateMediaStoreMetadata(
+      s.filePath, s.title, s.artist, s.album, s.genre, s.year || 0);
+    displayToast(ok ? "Tags saved to device file" : "Tags saved in library (device write not permitted)");
+  } else {
+    displayToast("Metadata tags saved");
+  }
 }
 
 function actionFetchOnlineArtwork() {
@@ -5819,13 +5953,23 @@ function setupMediaSessionIntegration() {
 }
 
 function updateMediaSession(song) {
+  if (!song) return;
+  if (isAndroid && window.AndroidBridge.updateMediaSession) {
+    window.AndroidBridge.updateMediaSession(
+      song.title || "", song.artist || "", song.album || "", song.artist || "",
+      song.genre || "", song.year || 0, song.duration || 0,
+      song.artwork || "", state.isPlaying, Math.floor(state.currentTime || 0)
+    );
+  }
   if ("mediaSession" in navigator) {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: song.title,
-      artist: song.artist,
-      album: song.album,
-      artwork: [{ src: song.artwork || "artwork/default.png", sizes: "512x512", type: "image/png" }]
-    });
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        artwork: [{ src: song.artwork || "artwork/default.png", sizes: "512x512", type: "image/png" }]
+      });
+    } catch (e) {}
   }
 }
 
@@ -5864,9 +6008,17 @@ window.handleAndroidBack = function() {
 // Android MediaPlayer Event Bridge Hooks
 window.onAudioPrepared = function(durMs) {
   if (durMs > 0) {
-    state.duration = durMs / 1000;
+    const cueCur = state.songs[state.currentIndex];
+    if (!(cueCur && cueCur.cueOf)) {
+      state.duration = durMs / 1000;
+    }
     updateTimerDisplays();
     drawPowerampScrubber(true);
+  }
+  if (state.pendingSeekMs != null && window.AndroidBridge.seekAudio) {
+    window.AndroidBridge.seekAudio(state.pendingSeekMs);
+    state.currentTime = state.pendingSeekMs / 1000;
+    state.pendingSeekMs = null;
   }
 };
 

@@ -575,3 +575,17 @@ All prompts below have been verified present in the shipped code (commit `f32216
 Regression: 49/49 jsdom tests green on `web/index.html` against the full library (folders, sort, dynamic queue, tempo, scan merge, markers, themes, stats, playlists, viz, crossfade, history).
 
 Build order note: the prompt's snippet order (assets → web) is reversed in practice; `build_apk.sh` copies `web/index.html` → `assets/index.html`. Edit `web/index.html`, never worry about `assets/`.
+
+---
+
+## v1.7 ADDITIONS (beyond the prompts)
+
+- Cue sheet support: MediaStore .cue scan bridge, JS parser (FILE/TRACK/TITLE/PERFORMER/INDEX),
+  virtual split tracks matched to indexed audio; offset seek on prepare, end-of-segment auto-
+  advance (JS timer + desktop timeupdate), segment duration kept in timer, skipped by crossfade,
+  excluded from default views & persistence, shown in Folders with "CUE" badge.
+- Tag editor: added Year field; MediaStore write-back via updateMediaStoreMetadata (best-effort,
+  truthful toast on success/denial).
+- Lock screen/notification: native MediaSession now receives full metadata (title/artist/album/
+  albumArtist/genre/year/duration) plus artwork for all schemes — content:// album art and
+  https:// downloads (background thread, 4s connect/6s read timeouts, 1024px cap).
