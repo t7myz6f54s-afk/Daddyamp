@@ -1757,7 +1757,7 @@ input:checked + .toggle-slider-bar::before {
 
       <!-- Stage 4: Technical Specs Table -->
       <div id="stage-specs-view">
-        <div class="spec-entry-row"><span class="spec-entry-label">File Name:</span><span class="spec-entry-value" id="spec-val-filename">dreamwave.mp3</span></div>
+        <div class="spec-entry-row"><span class="spec-entry-label">File Name:</span><span class="spec-entry-value" id="spec-val-filename">No file loaded</span></div>
         <div class="spec-entry-row"><span class="spec-entry-label">Container / Codec:</span><span class="spec-entry-value" id="spec-val-codec">WAV (Linear PCM)</span></div>
         <div class="spec-entry-row"><span class="spec-entry-label">Sample Rate:</span><span class="spec-entry-value" id="spec-val-samplerate">44,100 Hz</span></div>
         <div class="spec-entry-row"><span class="spec-entry-label">Bit Depth:</span><span class="spec-entry-value" id="spec-val-bitdepth">16-bit Lossless</span></div>
@@ -1868,6 +1868,16 @@ input:checked + .toggle-slider-bar::before {
             <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
+      </div>
+      <div class="setting-card-item" style="border-bottom: 1px solid var(--border-subtle); border-radius: 0; margin: 0;">
+        <div>
+          <div style="font-weight: 650; font-size: 12px;">Auto-fill Queue</div>
+          <div style="font-size: 10.5px; color: var(--text-tertiary);">When the queue ends, related tracks are added automatically</div>
+        </div>
+        <label class="toggle-switch-unit">
+          <input type="checkbox" id="toggle-auto-queue" checked onchange="saveAppOption('autoQueue', this.checked); displayToast(this.checked ? 'Auto-fill queue enabled' : 'Auto-fill queue disabled');">
+          <span class="toggle-slider-bar"></span>
+        </label>
       </div>
       <div class="sheet-scroll-body" id="queue-items-container">
         <!-- Rendered by JS -->
@@ -2001,8 +2011,8 @@ input:checked + .toggle-slider-bar::before {
           </div>
           <div class="setting-card-item">
             <div>
-              <div style="font-weight: 650; font-size: 13px;">Reset Library Cache</div>
-              <div style="font-size: 11px; color: var(--text-tertiary);">Restore default collection</div>
+              <div style="font-weight: 650; font-size: 13px;">Clear Library</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Remove imported &amp; indexed tracks from the app (files stay on device)</div>
             </div>
             <button class="btn-import-header" style="color: #FF5A5A;" onclick="resetLibraryCollection()">Reset</button>
           </div>
@@ -2043,6 +2053,32 @@ input:checked + .toggle-slider-bar::before {
               <input type="checkbox" id="toggle-lrclib-fetch" checked onchange="saveAppOption('lrclibFetch', this.checked)">
               <span class="toggle-slider-bar"></span>
             </label>
+          </div>
+        </div>
+
+        <div class="settings-section-block">
+          <div class="settings-section-tag">Playback</div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Auto-fill Queue</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Add related tracks when the queue ends (dynamic queue)</div>
+            </div>
+            <label class="toggle-switch-unit">
+              <input type="checkbox" id="toggle-auto-queue-settings" checked onchange="saveAppOption('autoQueue', this.checked); syncPlaybackSettingsUI();">
+              <span class="toggle-slider-bar"></span>
+            </label>
+          </div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Playback Speed</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Tempo 0.50&times; to 2.00&times;</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <input type="range" id="tempo-range" min="0.5" max="2" step="0.05" value="1"
+                     style="width: 130px; accent-color: var(--accent, #00E5FF);"
+                     oninput="applyTempo(parseFloat(this.value))">
+              <span id="tempo-value-label" style="font-size: 12px; font-weight: 700; min-width: 46px; text-align: right;">1.00&times;</span>
+            </div>
           </div>
         </div>
 
@@ -2158,43 +2194,11 @@ input:checked + .toggle-slider-bar::before {
    DADDYAMP SCRIPT ENGINE — CRAFT, STABILITY & ZERO UI THRASHING
    ========================================================================= */
 
-// Precomputed true acoustic waveform peaks (75 normalized peak bins)
-const REAL_WAVEFORM_PEAKS = {
-  "audio/dreamwave.mp3": [0.384, 0.577, 0.86, 0.795, 0.833, 0.898, 0.758, 0.81, 0.892, 0.784, 0.93, 0.836, 0.752, 0.851, 0.88, 0.804, 0.95, 0.86, 0.845, 0.819, 0.851, 0.909, 0.801, 0.749, 0.921, 0.825, 0.912, 0.842, 0.792, 0.877, 0.857, 0.772, 0.9, 0.81, 0.825, 0.81, 0.833, 0.898, 0.845, 0.874, 0.877, 0.787, 0.889, 0.868, 0.76, 0.895, 0.816, 0.816, 0.883, 0.781, 0.851, 0.822, 0.787, 0.93, 0.825, 0.772, 0.874, 0.854, 0.845, 0.909, 0.848, 0.86, 0.813, 0.845, 0.927, 0.798, 0.743, 0.892, 0.822, 0.924, 0.807, 0.653, 0.6, 0.454, 0.308],
-  "audio/cyberpunk.mp3": [0.454, 0.82, 0.899, 0.917, 0.862, 0.934, 0.944, 0.899, 0.917, 0.862, 0.934, 0.946, 0.899, 0.917, 0.862, 0.934, 0.946, 0.899, 0.919, 0.862, 0.934, 0.942, 0.899, 0.919, 0.862, 0.934, 0.946, 0.899, 0.919, 0.862, 0.934, 0.944, 0.899, 0.917, 0.862, 0.934, 0.944, 0.899, 0.919, 0.862, 0.934, 0.95, 0.899, 0.919, 0.862, 0.934, 0.946, 0.899, 0.917, 0.862, 0.934, 0.944, 0.899, 0.919, 0.864, 0.934, 0.944, 0.899, 0.917, 0.862, 0.934, 0.944, 0.899, 0.919, 0.864, 0.934, 0.946, 0.899, 0.919, 0.864, 0.853, 0.736, 0.577, 0.456, 0.336],
-  "audio/stellar.mp3": [0.336, 0.469, 0.594, 0.68, 0.731, 0.776, 0.801, 0.76, 0.821, 0.772, 0.801, 0.848, 0.891, 0.897, 0.903, 0.85, 0.807, 0.852, 0.831, 0.842, 0.87, 0.874, 0.848, 0.846, 0.835, 0.819, 0.839, 0.856, 0.819, 0.801, 0.805, 0.786, 0.837, 0.835, 0.811, 0.805, 0.837, 0.876, 0.868, 0.862, 0.895, 0.909, 0.907, 0.858, 0.782, 0.774, 0.799, 0.88, 0.811, 0.799, 0.833, 0.844, 0.897, 0.923, 0.919, 0.897, 0.95, 0.901, 0.893, 0.905, 0.901, 0.909, 0.907, 0.868, 0.911, 0.87, 0.872, 0.835, 0.776, 0.698, 0.629, 0.539, 0.459, 0.377, 0.299]
-};
 
-// 24 Curated tracks library
-const REALISTIC_COLLECTION = [
-  { id: 101, title: "Dreamwave Nights", artist: "Audify Sound Collective", album: "Neon Horizons", genre: "Synthwave", year: 2026, duration: 32, path: "audio/dreamwave.mp3", artwork: "artwork/dreamwave.png", favorite: 1, play_count: 7, lyrics: `[00:00.00] Drift away across the neon highway\n[00:04.00] Purple horizons glowing in the rearview mirror\n[00:08.50] Synthesizer pulses softly in the midnight air\n[00:13.00] Cruising with DaddyAmp under electric starlight\n[00:18.00] No destination needed, just endless sound\n[00:23.00] Let the rhythm carry every heartbeat away\n[00:27.50] Pure melody, pure freedom` },
-  { id: 102, title: "Midnight Cyberpunk", artist: "Kavinsky Matrix", album: "Chrome City", genre: "Cyberpunk", year: 2026, duration: 30, path: "audio/cyberpunk.mp3", artwork: "artwork/cyberpunk.png", favorite: 0, play_count: 4, lyrics: `[00:00.00] Rain falling down the towering glass spires\n[00:04.00] Neon crimson reflection in the alleyways\n[00:08.00] High-frequency voltage running through the grid\n[00:13.00] Bass reverberating deep through the urban soul\n[00:18.00] Shadows and cyber-rhythms moving as one\n[00:23.00] Electric heart, synthetic dreams\n[00:27.00] Welcome to the edge of tomorrow` },
-  { id: 103, title: "Stellar Horizon", artist: "Solaris Ensemble", album: "Deep Space Echoes", genre: "Ambient", year: 2026, duration: 28, path: "audio/stellar.mp3", artwork: "artwork/stellar.png", favorite: 0, play_count: 2, lyrics: `[00:00.00] Floating above the rings of a distant world\n[00:05.00] Cosmic dust glistening like diamonds in the void\n[00:10.00] Gentle ambient harmony touching the infinite\n[00:15.50] Beyond the edge of gravity and time\n[00:20.00] Stars breathing in slow celestial rhythm\n[00:25.00] Endless peace in the deep expanse` },
-  { id: 104, title: "Sunset Boulevard", artist: "Audify Sound Collective", album: "Neon Horizons", genre: "Synthwave", year: 2026, duration: 32, path: "audio/dreamwave.mp3", artwork: "artwork/dreamwave.png", favorite: 0, play_count: 3, lyrics: "" },
-  { id: 105, title: "Neon Rain", artist: "Kavinsky Matrix", album: "Chrome City", genre: "Cyberpunk", year: 2026, duration: 30, path: "audio/cyberpunk.mp3", artwork: "artwork/cyberpunk.png", favorite: 1, play_count: 5, lyrics: "" },
-  { id: 106, title: "Orbital Drift", artist: "Solaris Ensemble", album: "Deep Space Echoes", genre: "Ambient", year: 2026, duration: 28, path: "audio/stellar.mp3", artwork: "artwork/stellar.png", favorite: 0, play_count: 1, lyrics: "" },
-  { id: 107, title: "Tokyo Driftway", artist: "M83 Resonance", album: "Tokyo 2088", genre: "Synthwave", year: 2025, duration: 32, path: "audio/dreamwave.mp3", artwork: "artwork/dreamwave.png", favorite: 0, play_count: 2, lyrics: "" },
-  { id: 108, title: "Cyber District 9", artist: "Kavinsky Matrix", album: "Chrome City", genre: "Cyberpunk", year: 2026, duration: 30, path: "audio/cyberpunk.mp3", artwork: "artwork/cyberpunk.png", favorite: 0, play_count: 1, lyrics: "" },
-  { id: 109, title: "Gravity Zero", artist: "Solaris Ensemble", album: "Deep Space Echoes", genre: "Ambient", year: 2026, duration: 28, path: "audio/stellar.mp3", artwork: "artwork/stellar.png", favorite: 0, play_count: 0, lyrics: "" },
-  { id: 110, title: "Starlight Echo", artist: "Chilled Cow Vibes", album: "Midnight Tapes", genre: "Lo-Fi", year: 2025, duration: 32, path: "audio/dreamwave.mp3", artwork: "artwork/default.png", favorite: 1, play_count: 6, lyrics: "" },
-  { id: 111, title: "Velvet Shadows", artist: "Chilled Cow Vibes", album: "Midnight Tapes", genre: "Lo-Fi", year: 2025, duration: 30, path: "audio/cyberpunk.mp3", artwork: "artwork/default.png", favorite: 0, play_count: 2, lyrics: "" },
-  { id: 112, title: "Solar Flares", artist: "Cyber Collective", album: "Supernova", genre: "Electronic", year: 2026, duration: 28, path: "audio/stellar.mp3", artwork: "artwork/stellar.png", favorite: 0, play_count: 1, lyrics: "" },
-  { id: 113, title: "Pulse Code", artist: "Cyber Collective", album: "Supernova", genre: "Electronic", year: 2026, duration: 32, path: "audio/dreamwave.mp3", artwork: "artwork/dreamwave.png", favorite: 0, play_count: 3, lyrics: "" },
-  { id: 114, title: "Dark Matter", artist: "Cyber Collective", album: "Supernova", genre: "Electronic", year: 2026, duration: 30, path: "audio/cyberpunk.mp3", artwork: "artwork/cyberpunk.png", favorite: 0, play_count: 0, lyrics: "" },
-  { id: 115, title: "Northern Lights", artist: "Solaris Ensemble", album: "Aurora", genre: "Ambient", year: 2025, duration: 28, path: "audio/stellar.mp3", artwork: "artwork/stellar.png", favorite: 0, play_count: 4, lyrics: "" },
-  { id: 116, title: "Frostbite", artist: "Nordic Soundscape", album: "Nordic Winters", genre: "Post-Rock", year: 2024, duration: 32, path: "audio/dreamwave.mp3", artwork: "artwork/default.png", favorite: 0, play_count: 1, lyrics: "" },
-  { id: 117, title: "Glacier Winds", artist: "Nordic Soundscape", album: "Nordic Winters", genre: "Post-Rock", year: 2024, duration: 30, path: "audio/cyberpunk.mp3", artwork: "artwork/default.png", favorite: 0, play_count: 0, lyrics: "" },
-  { id: 118, title: "Deep Blue Sea", artist: "Horizon Waves", album: "Coastal Mirage", genre: "Deep House", year: 2025, duration: 28, path: "audio/stellar.mp3", artwork: "artwork/stellar.png", favorite: 1, play_count: 8, lyrics: "" },
-  { id: 119, title: "Coastal Mirage", artist: "Horizon Waves", album: "Coastal Mirage", genre: "Deep House", year: 2025, duration: 32, path: "audio/dreamwave.mp3", artwork: "artwork/dreamwave.png", favorite: 0, play_count: 3, lyrics: "" },
-  { id: 120, title: "Night Drive", artist: "M83 Resonance", album: "Tokyo 2088", genre: "Synthwave", year: 2025, duration: 30, path: "audio/cyberpunk.mp3", artwork: "artwork/cyberpunk.png", favorite: 0, play_count: 2, lyrics: "" },
-  { id: 121, title: "Skyline Memories", artist: "Chilled Cow Vibes", album: "Midnight Tapes", genre: "Lo-Fi", year: 2025, duration: 28, path: "audio/stellar.mp3", artwork: "artwork/default.png", favorite: 0, play_count: 1, lyrics: "" },
-  { id: 122, title: "Void Runner", artist: "Kavinsky Matrix", album: "Neon Grid", genre: "Cyberpunk", year: 2026, duration: 32, path: "audio/dreamwave.mp3", artwork: "artwork/cyberpunk.png", favorite: 0, play_count: 0, lyrics: "" },
-  { id: 123, title: "Echo Chamber", artist: "Audify Sound Collective", album: "Film Scores Vol. 1", genre: "Cinematic", year: 2026, duration: 30, path: "audio/cyberpunk.mp3", artwork: "artwork/default.png", favorite: 0, play_count: 1, lyrics: "" },
-  { id: 124, title: "Finale: The Edge of Time", artist: "Audify Sound Collective", album: "Film Scores Vol. 1", genre: "Cinematic", year: 2026, duration: 28, path: "audio/stellar.mp3", artwork: "artwork/dreamwave.png", favorite: 1, play_count: 9, lyrics: "" }
-];
 
+// Library state
 let state = {
-  songs: [...REALISTIC_COLLECTION],
+  songs: [],
   queue: [],
   currentIndex: 0,
   isPlaying: false,
@@ -2225,7 +2229,9 @@ let state = {
     dynamicTheme: true,
     accentColor: "#00E5FF",
     autoPause: true,
-    lrclibFetch: true
+    lrclibFetch: true,
+    autoQueue: true,
+    tempo: 1.0
   },
   sleepTimer: {
     active: false,
@@ -2298,7 +2304,7 @@ function loadPersistedData() {
     if (imported) {
       const parsed = JSON.parse(imported);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        state.songs = [...parsed, ...REALISTIC_COLLECTION];
+        state.songs = [...parsed];
       }
     }
     const liked = localStorage.getItem("daddyamp_liked_ids");
@@ -2334,6 +2340,8 @@ function applyPersistedSettings() {
   if (!state.settings.dynamicTheme && state.settings.accentColor) {
     applyPaletteTheme(state.settings.accentColor);
   }
+  syncPlaybackSettingsUI();
+  applyTempo(parseFloat(state.settings.tempo) || 1.0);
 }
 
 function refreshBadges() {
@@ -2620,9 +2628,11 @@ function startPlayback() {
       ? song.path 
       : "file:///android_asset/" + song.path;
     window.AndroidBridge.playAudio(audioPath);
+    window.AndroidBridge.setTempo(state.settings.tempo || 1.0);
   } else {
     audioEl.src = song.path;
     audioEl.currentTime = state.currentTime;
+    audioEl.playbackRate = state.settings.tempo || 1.0;
     audioEl.play().catch(() => {});
   }
 
@@ -2684,6 +2694,24 @@ function executePlayNext() {
     }
   }
 
+  // Poweramp-style dynamic queue: auto-fill with related tracks
+  if (state.settings.autoQueue) {
+    const fill = buildDynamicFill();
+    if (fill.length > 0) {
+      state.queue = fill;
+      const fillSong = state.queue.shift();
+      const fillIdx = state.songs.findIndex(s => s.id === fillSong.id);
+      if (fillIdx !== -1) {
+        loadTrack(fillIdx, true);
+        renderInPlayerQueue();
+        renderQueueList();
+        refreshBadges();
+        displayToast(`Dynamic queue: ${fill.length + 1} related tracks added`);
+        return;
+      }
+    }
+  }
+
   let nextIdx;
   if (state.shuffle) {
     nextIdx = Math.floor(Math.random() * state.songs.length);
@@ -2691,6 +2719,67 @@ function executePlayNext() {
     nextIdx = (state.currentIndex + 1) % state.songs.length;
   }
   loadTrack(nextIdx, true);
+}
+
+function buildDynamicFill(limit = 12) {
+  const ref = state.songs[state.currentIndex];
+  if (!ref || state.songs.length < 2) return [];
+  const inQueue = new Set(state.queue.map(q => q.id));
+  const seen = new Set();
+  const cands = state.songs.filter(sd => {
+    if (sd.id === ref.id || inQueue.has(sd.id) || seen.has(sd.id)) return false;
+    seen.add(sd.id);
+    return true;
+  });
+  const scored = cands
+    .map(sd => {
+      let score = 0;
+      if (sd.album && ref.album && sd.album === ref.album) score += 4;
+      if (sd.artist && ref.artist && sd.artist === ref.artist) score += 3;
+      if (sd.genre && ref.genre && sd.genre === ref.genre) score += 2;
+      if (sd.year && ref.year && sd.year === ref.year) score += 1;
+      score -= Math.min(sd.play_count || 0, 5); // prefer less-played tracks
+      return { sd, score };
+    })
+    .filter(x => x.score > 0);
+  if (scored.length === 0) return [];
+  // randomize inside equal-score tiers so fills vary
+  const tiers = {};
+  scored.forEach(x => { (tiers[x.score] = tiers[x.score] || []).push(x.sd); });
+  const out = [];
+  Object.keys(tiers).sort((a, b) => b - a).forEach(k => {
+    const tier = [...tiers[k]];
+    for (let i = tier.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [tier[i], tier[j]] = [tier[j], tier[i]];
+    }
+    out.push(...tier);
+  });
+  return out.slice(0, limit);
+}
+
+function applyTempo(v) {
+  v = Math.min(2.0, Math.max(0.5, Math.round((isNaN(v) ? 1 : v) * 100) / 100));
+  state.settings.tempo = v;
+  persistState();
+  const lbl = document.getElementById("tempo-value-label");
+  if (lbl) lbl.textContent = v.toFixed(2) + "\u00d7";
+  if (isAndroid) {
+    window.AndroidBridge.setTempo(v);
+  } else {
+    audioEl.playbackRate = v;
+  }
+}
+
+function syncPlaybackSettingsUI() {
+  const aq1 = document.getElementById("toggle-auto-queue");
+  const aq2 = document.getElementById("toggle-auto-queue-settings");
+  if (aq1) aq1.checked = !!state.settings.autoQueue;
+  if (aq2) aq2.checked = !!state.settings.autoQueue;
+  const rng = document.getElementById("tempo-range");
+  if (rng) rng.value = state.settings.tempo || 1;
+  const lbl = document.getElementById("tempo-value-label");
+  if (lbl) lbl.textContent = (state.settings.tempo || 1).toFixed(2) + "\u00d7";
 }
 
 function executePlayPrevious() {
@@ -3476,7 +3565,7 @@ function playFolderTracks(folderPath, shuffle) {
   displayToast(`Playing folder: ${dirBaseName(folderPath)}`);
 }
 
-function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks in library", targetEl = null) {
+function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — import files or scan your device", targetEl = null) {
   const target = targetEl || document.getElementById("library-render-target");
   target.innerHTML = "";
 
@@ -3485,10 +3574,16 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks in libra
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px; text-align: center; gap: 12px;">
         <svg class="icon" style="width: 40px; height: 40px; color: var(--text-tertiary);" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
         <div style="font-size: 14px; font-weight: 700; color: var(--text-pure);">${emptyMsg}</div>
-        <button class="btn-import-header" onclick="invokeAudioImport()">
-          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Import Audio Files
-        </button>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+          <button class="btn-import-header" onclick="invokeAudioImport()">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Import Audio Files
+          </button>
+          <button class="btn-import-header" onclick="invokeDeviceScan()">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Scan Device Audio
+          </button>
+        </div>
       </div>
     `;
     return;
@@ -3853,7 +3948,7 @@ function invokeDeviceScan() {
     const jsonStr = window.AndroidBridge.scanDeviceMusic(filter);
     const scanned = JSON.parse(jsonStr);
     if (scanned && scanned.length > 0) {
-      const merged = [...REALISTIC_COLLECTION];
+      const merged = [];
       scanned.forEach((ds) => {
         merged.push({
           id: ds.id || (Date.now() + Math.floor(Math.random() * 10000)),
@@ -3890,14 +3985,14 @@ function invokeDeviceScan() {
 }
 
 function resetLibraryCollection() {
-  if (confirm("Reset music library back to default audio collection?")) {
-    state.songs = [...REALISTIC_COLLECTION];
+  if (confirm("Clear the music library? Imported and indexed tracks will be removed from the app. Your files stay on the device.")) {
+    state.songs = [];
     persistState();
     refreshBadges();
     renderLibraryTab();
     loadTrack(0, false);
     dismissAllSheets();
-    displayToast("Library reset to default");
+    displayToast("Library cleared");
   }
 }
 
@@ -3983,6 +4078,7 @@ function triggerSleepTimerExpiration() {
 
 function showQueueSheet() {
   dismissAllSheets();
+  syncPlaybackSettingsUI();
   renderQueueList();
   document.getElementById("sheet-mask-queue").classList.add("open");
 }
@@ -3994,6 +4090,7 @@ function showEqualizerSheet() {
 
 function showSettingsSheet() {
   dismissAllSheets();
+  syncPlaybackSettingsUI();
   document.getElementById("sheet-mask-settings").classList.add("open");
 }
 
@@ -4014,7 +4111,9 @@ function renderQueueList() {
   container.innerHTML = "";
 
   if (state.queue.length === 0) {
-    container.innerHTML = `<div style="padding: 28px 0; text-align: center; color: var(--text-tertiary); font-size: 12px;">Queue is currently empty. Tap three dots on any track to add it here.</div>`;
+    container.innerHTML = `<div style="padding: 22px 14px; text-align: center; color: var(--text-tertiary); font-size: 12px; line-height: 1.7;">
+      ${state.settings.autoQueue ? "Auto-fill is ON \u2014 related tracks will be added automatically when the queue runs out." : "Queue is empty. Tap three dots on any track to add it here."}
+    </div>`;
     return;
   }
 

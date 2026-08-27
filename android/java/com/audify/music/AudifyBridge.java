@@ -17,6 +17,7 @@ import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
+import android.media.PlaybackParams;
 import android.media.audiofx.BassBoost;
 import android.media.audiofx.Equalizer;
 import android.media.audiofx.Virtualizer;
@@ -59,6 +60,8 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     private float preampGainDb = 0.0f;
     private float replayGainDb = 0.0f;
     private boolean replayGainEnabled = false;
+    private float tempo = 1.0f;
+    private boolean playbackActive = false;
 
     private String currentPath = "";
     private String nextPath = "";
@@ -454,7 +457,13 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
             mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
                 public void onPrepared(MediaPlayer mp) {
+                    if (Build.VERSION.SDK_INT >= 23 && tempo != 1.0f) {
+                        try {
+                            mp.setPlaybackParams(mp.getPlaybackParams().setSpeed(tempo));
+                        } catch (Exception ignored) {}
+                    }
                     mp.start();
+                    playbackActive = true;
                     setupAudioFx(mp.getAudioSessionId());
                     final int duration = mp.getDuration();
                     updatePlaybackState(PlaybackState.STATE_PLAYING, 0, 1.0f);
@@ -465,6 +474,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
             mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                 @Override
                 public void onCompletion(MediaPlayer mp) {
+                    playbackActive = false;
                     updateKeepScreenOn(false);
                     updatePlaybackState(PlaybackState.STATE_PAUSED, mp.getDuration(), 0.0f);
                     runOnJs("if (window.onAudioFinished) { window.onAudioFinished(); }");
@@ -474,6 +484,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
             mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
                 @Override
                 public boolean onError(MediaPlayer mp, int what, int extra) {
+                    playbackActive = false;
                     Log.e(TAG, "MediaPlayer error: " + what + ", " + extra);
                     updateKeepScreenOn(false);
                     runOnJs("if (window.onAudioError) { window.onAudioError(" + what + "); }");
@@ -695,6 +706,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     @JavascriptInterface
     public void pauseAudio() {
         if (mediaPlayer != null && mediaPlayer.isPlaying()) {
+            playbackActive = false;
             mediaPlayer.pause();
             updateKeepScreenOn(false);
             updatePlaybackState(PlaybackState.STATE_PAUSED, getCurrentPosition(), 0.0f);
@@ -707,9 +719,25 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
         requestAudioFocus();
         registerNoisyReceiver();
         if (mediaPlayer != null) {
+            playbackActive = true;
             mediaPlayer.start();
             updateKeepScreenOn(true);
             updatePlaybackState(PlaybackState.STATE_PLAYING, getCurrentPosition(), 1.0f);
+        }
+    }
+
+    @JavascriptInterface
+    public void setTempo(final float speed) {
+        this.tempo = Math.max(0.5f, Math.min(2.0f, speed));
+        if (mediaPlayer == null || Build.VERSION.SDK_INT < 23) return;
+        try {
+            PlaybackParams pp = mediaPlayer.getPlaybackParams();
+            mediaPlayer.setPlaybackParams(pp.setSpeed(this.tempo));
+            if (playbackActive) {
+                mediaPlayer.start();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "setTempo failed: " + e.getMessage());
         }
     }
 
