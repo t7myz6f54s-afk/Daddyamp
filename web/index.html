@@ -1934,6 +1934,9 @@ input:checked + .toggle-slider-bar::before {
     <button class="subnav-tab-item" id="tab-btn-lists" onclick="selectLibraryTab('lists')">
       Lists <span class="subnav-count-tag" id="tag-lists-count">0</span>
     </button>
+    <button class="subnav-tab-item" id="tab-btn-history" onclick="selectLibraryTab('history')">
+      History
+    </button>
   </nav>
 
   <!-- SCROLLABLE LIBRARY MAIN VIEWPORT -->
@@ -4203,6 +4206,8 @@ function renderLibraryTab() {
     renderFolderBrowser();
   } else if (tab === "lists") {
     renderPlaylistsView();
+  } else if (tab === "history") {
+    renderHistoryTab();
   }
 }
 
@@ -4777,6 +4782,60 @@ function playHistoryEntry(songId) {
   const idx = state.songs.findIndex(sd => sd.id === songId);
   if (idx !== -1) loadTrack(idx, true);
   dismissAllSheets();
+}
+
+function renderHistoryTab() {
+  const target = document.getElementById("library-render-target");
+  if (state.listenHistory.length === 0) {
+    target.innerHTML = `
+      <div class="empty-state-craft">
+        <div class="empty-state-illustration" style="display:flex; align-items:center; justify-content:center;">
+          <svg class="icon" style="width: 44px; height: 44px; color: var(--text-tertiary);" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="empty-state-headline">No listening history yet</div>
+        <div class="empty-state-sub">Start playing music and your history will appear here</div>
+      </div>`;
+    return;
+  }
+  const seen = new Set();
+  const recent = state.listenHistory.filter(h => {
+    if (seen.has(h.id)) return false;
+    seen.add(h.id);
+    return true;
+  }).slice(0, 40);
+
+  target.innerHTML = `
+    <div class="catalog-stats-banner">
+      <span>${state.listenHistory.length} PLAYS TRACKED</span>
+      <span>TAP A ROW TO REPLAY</span>
+    </div>
+    <div id="history-rows-holder"></div>
+  `;
+  const holder = document.getElementById("history-rows-holder");
+  const listEl = document.createElement("div");
+  listEl.className = "song-rows-catalog";
+  recent.forEach(h => {
+    const sd = state.songs.find(x => x.id === h.id);
+    const row = document.createElement("div");
+    row.className = "song-catalog-row";
+    row.style.cursor = "pointer";
+    row.innerHTML = `
+      <div class="row-artwork-frame">
+        <img src="${(sd && sd.artwork) || 'artwork/default.png'}" class="row-artwork-img" alt="${escHtml(h.title)}">
+      </div>
+      <div class="row-meta-content">
+        <div class="row-title-line">${escHtml(h.title)}</div>
+        <div class="row-details-line"><span>${escHtml(h.artist || "Unknown")}</span><span>•</span><span>${timeAgo(h.ts)}</span></div>
+      </div>
+      <div class="row-trailing-group">
+        <span class="row-duration-digits" style="font-family: var(--font-mono); font-size: 10px;">${fmtPlayTime(h.dur || 0)}</span>
+        <svg class="icon icon-md" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+    `;
+    row.onclick = () => playHistoryEntry(h.id);
+    listEl.appendChild(row);
+  });
+  holder.appendChild(listEl);
 }
 
 function playFolderTracks(folderPath, shuffle) {
