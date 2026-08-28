@@ -2693,6 +2693,146 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
 
 
 
+
+/* v1.28 Library Home portal — Poweramp-like category surface */
+#library-category-portal {
+  position: fixed;
+  inset: calc(var(--header-h) + env(safe-area-inset-top, 0px)) 0 calc(var(--mini-player-h) + var(--bottom-nav-h) + 10px) 0;
+  z-index: 72;
+  background:
+    radial-gradient(90% 70% at 10% 0%, var(--accent-ambient), transparent 58%),
+    linear-gradient(180deg, rgba(6,7,9,0.96), rgba(10,12,17,0.985));
+  transform: translate3d(104%, 0, 0);
+  opacity: 0.001;
+  pointer-events: none;
+  transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms var(--ease-out);
+  overflow: hidden;
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -22px 0 60px rgba(0,0,0,0.42);
+}
+#library-category-portal.open {
+  transform: translate3d(0, 0, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+#library-category-portal.dragging {
+  transition: none !important;
+  will-change: transform, opacity;
+}
+.portal-inner-scroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 14px 14px 22px 14px;
+  overscroll-behavior: contain;
+}
+.portal-hero-card {
+  border-radius: 24px;
+  padding: 16px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)),
+    radial-gradient(90% 120% at 100% 0%, var(--accent-soft), transparent 60%);
+  border: 1px solid rgba(255,255,255,0.11);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 18px 42px rgba(0,0,0,0.25);
+  margin-bottom: 12px;
+}
+.portal-kicker { font-size: 10px; color: var(--accent); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+.portal-title { margin-top: 4px; font-size: 24px; line-height: 1.08; font-weight: 780; letter-spacing: -0.035em; }
+.portal-subtitle { margin-top: 7px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.portal-quick-row { display: flex; gap: 8px; margin-top: 13px; }
+.portal-action-pill {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255,255,255,0.045);
+  color: var(--text-pure);
+  font-size: 11.5px;
+  font-weight: 720;
+}
+.portal-section-label {
+  padding: 10px 2px 8px 2px;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.portal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.portal-category-card {
+  min-height: 104px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.085);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025)),
+    radial-gradient(90% 80% at 0% 0%, var(--portal-tint, var(--accent-soft)), transparent 62%);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transform: translateZ(0);
+  transition: transform 150ms var(--ease-out), border-color 150ms var(--ease-out), background 150ms var(--ease-out);
+  animation: portalCardIn 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.portal-category-card:active { transform: scale(0.975); }
+.portal-category-card:hover { border-color: var(--border-active); }
+.portal-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.portal-card-icon {
+  width: 38px; height: 38px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent); background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.07);
+}
+.portal-card-count { font-size: 10px; font-family: var(--font-mono); color: var(--text-tertiary); }
+.portal-card-title { font-size: 15px; font-weight: 760; letter-spacing: -0.01em; }
+.portal-card-sub { margin-top: 3px; font-size: 11px; color: var(--text-tertiary); line-height: 1.32; }
+.portal-card-arrow { align-self: flex-end; color: rgba(255,255,255,0.38); }
+.portal-mini-return {
+  position: sticky;
+  bottom: 0;
+  margin-top: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.095);
+  background: rgba(8,9,12,0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 10px 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.portal-return-title { font-size: 12px; font-weight: 740; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-return-sub { font-size: 10.5px; color: var(--text-tertiary); }
+.library-swipe-peek {
+  position: fixed;
+  top: calc(var(--header-h) + var(--subnav-h) + 8px);
+  right: 10px;
+  z-index: 68;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(10px) scale(0.96);
+  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(7,8,11,0.82);
+  border: 1px solid var(--border-medium);
+  color: var(--text-pure);
+  font-size: 11px;
+  font-weight: 760;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+}
+.library-swipe-peek.visible { opacity: 1; transform: translateX(0) scale(1); }
+@keyframes portalCardIn {
+  from { opacity: 0; transform: translate3d(22px, 8px, 0) scale(0.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@media (max-width: 370px) {
+  .portal-grid { gap: 8px; }
+  .portal-category-card { min-height: 96px; padding: 10px; }
+  .portal-title { font-size: 21px; }
+}
+
 /* Fluid gesture polish */
 #full-player-screen.gesture-dragging {
   transition: none !important;
@@ -2930,6 +3070,34 @@ html.mini-has-context .mini-context-chip { display: inline; }
       History
     </button>
   </nav>
+
+
+  <!-- Swipe-in Library Home / Category Portal -->
+  <section id="library-category-portal" aria-hidden="true"
+           ontouchstart="portalSwipeStart(event)" ontouchmove="portalSwipeMove(event)" ontouchend="portalSwipeEnd(event)">
+    <div class="portal-inner-scroll" id="portal-inner-scroll">
+      <div class="portal-hero-card">
+        <div class="portal-kicker">Library Home</div>
+        <div class="portal-title">Choose where the music lives.</div>
+        <div class="portal-subtitle">Swipe right to return. Pick a category to jump into albums, folders, playlists, history, or all songs.</div>
+        <div class="portal-quick-row">
+          <button class="portal-action-pill" onclick="openCurrentPlaybackContext(); closeLibraryPortal();">Current context</button>
+          <button class="portal-action-pill" onclick="expandNowPlayingScreen(); closeLibraryPortal();">Now Playing</button>
+        </div>
+      </div>
+      <div class="portal-section-label">Browse</div>
+      <div class="portal-grid" id="portal-category-grid"></div>
+      <div class="portal-mini-return" onclick="expandNowPlayingScreen(); closeLibraryPortal();">
+        <div style="min-width:0; flex:1;">
+          <div class="portal-return-title" id="portal-return-title">No track selected</div>
+          <div class="portal-return-sub">Swipe right or tap to return to player</div>
+        </div>
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </div>
+    </div>
+  </section>
+  <div class="library-swipe-peek" id="library-swipe-peek">Library Home</div>
+
 
   <!-- SCROLLABLE LIBRARY MAIN VIEWPORT -->
   <main id="library-scroll-container">
@@ -3990,6 +4158,7 @@ window.addEventListener("DOMContentLoaded", () => {
   attachFullPlayerFluidGestures();
   attachCatalogLoadMore();
   attachLibraryPinchZoom();
+  attachLibrarySwipePortal();
   armTransportHoldMenus();
   armArtFallback();
 
@@ -5853,6 +6022,250 @@ function collapseNowPlayingScreen() {
   document.getElementById("full-player-screen").classList.remove("open");
 }
 
+
+/* =========================================================================
+   LIBRARY CATEGORY PORTAL — swipe-left Library Home
+   ========================================================================= */
+let librarySwipe = { sx: 0, sy: 0, active: false, tracking: false, dx: 0, fromPortal: false };
+let portalSwipe = { sx: 0, sy: 0, active: false, dx: 0 };
+
+function genreIndexEntries() {
+  const map = {};
+  for (const s of libraryTracks()) {
+    const key = cleanContextLabel(s.genre && s.genre !== "Folder Audio" ? s.genre : "Unknown Genre", "Unknown Genre");
+    const arr = map[key] || (map[key] = { name: key, songs: [] });
+    arr.songs.push(s);
+  }
+  return Object.keys(map).map(k => {
+    map[k].songs = contextSortSongs(map[k].songs);
+    map[k].duration = sumSongDuration(map[k].songs);
+    return map[k];
+  }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+}
+
+function portalIcon(kind) {
+  const icons = {
+    songs: '<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>',
+    albums: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="1"/>',
+    artists: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    folders: '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+    genres: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    playlists: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
+    favorite: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+    recent: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    queue: '<path d="M3 6h13"/><path d="M3 12h11"/><path d="M3 18h9"/><polygon points="17 10 22 13 17 16 17 10"/>',
+    search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'
+  };
+  return icons[kind] || icons.songs;
+}
+
+function buildPortalCategories() {
+  const genres = genreIndexEntries();
+  const folders = folderBadgeCount();
+  const historyUnique = new Set((state.listenHistory || []).map(h => h.id)).size;
+  const now = state.songs[state.currentIndex];
+  return [
+    { key: "tracks", icon: "songs", title: "All Songs", count: _badges.tracks || libraryTracks().length, sub: "Every track in one list", tint: "rgba(0,229,255,0.12)", action: "selectPortalCategory('tracks')" },
+    { key: "folders", icon: "folders", title: "Folders", count: folders, sub: "Music by device folder", tint: "rgba(0,230,118,0.12)", action: "selectPortalCategory('folders')" },
+    { key: "albums", icon: "albums", title: "Albums", count: _badges.albums || albumIndexEntries().length, sub: "Records and compilations", tint: "rgba(124,92,255,0.13)", action: "selectPortalCategory('albums')" },
+    { key: "artists", icon: "artists", title: "Artists", count: _badges.artists || artistIndexEntries().length, sub: "Artist pages and albums", tint: "rgba(255,179,0,0.13)", action: "selectPortalCategory('artists')" },
+    { key: "genres", icon: "genres", title: "Genres", count: genres.length, sub: "Rock, pop, classical…", tint: "rgba(255,51,102,0.12)", action: "selectPortalCategory('genres')" },
+    { key: "lists", icon: "playlists", title: "Playlists", count: state.playlists.length, sub: "Your saved mixes", tint: "rgba(126,200,227,0.12)", action: "selectPortalCategory('lists')" },
+    { key: "liked", icon: "favorite", title: "Favorites", count: _badges.liked || 0, sub: "Songs you hearted", tint: "rgba(255,51,102,0.14)", action: "selectPortalCategory('liked')" },
+    { key: "history", icon: "recent", title: "Recently Played", count: historyUnique, sub: "Your listening trail", tint: "rgba(255,255,255,0.08)", action: "selectPortalCategory('history')" },
+    { key: "queue", icon: "queue", title: "Queue", count: state.queue.length, sub: now ? `After ${now.title || "current song"}` : "What plays next", tint: "rgba(0,229,255,0.10)", action: "openPortalQueue()" },
+    { key: "search", icon: "search", title: "Search", count: "", sub: "Find songs, albums, folders", tint: "rgba(255,255,255,0.07)", action: "openPortalSearch()" }
+  ];
+}
+
+function renderLibraryPortal() {
+  const grid = document.getElementById("portal-category-grid");
+  if (!grid) return;
+  refreshBadges();
+  const cards = buildPortalCategories();
+  grid.innerHTML = cards.map((c, idx) => `
+    <div class="portal-category-card" style="--portal-tint:${c.tint}; animation-delay:${Math.min(idx * 34, 240)}ms;" onclick="${c.action}">
+      <div class="portal-card-top">
+        <div class="portal-card-icon"><svg class="icon icon-md" viewBox="0 0 24 24">${portalIcon(c.icon)}</svg></div>
+        <div class="portal-card-count">${c.count === "" ? "" : String(c.count)}</div>
+      </div>
+      <div>
+        <div class="portal-card-title">${escHtml(c.title)}</div>
+        <div class="portal-card-sub">${escHtml(c.sub)}</div>
+      </div>
+      <svg class="icon icon-xs portal-card-arrow" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`).join("");
+  const rt = document.getElementById("portal-return-title");
+  const cur = state.songs[state.currentIndex];
+  if (rt) rt.textContent = cur ? `${cur.title || "Current track"} — ${cur.artist || ""}` : "No track selected";
+}
+
+function openLibraryPortal() {
+  renderLibraryPortal();
+  const portal = document.getElementById("library-category-portal");
+  if (!portal) return;
+  portal.classList.add("open");
+  portal.setAttribute("aria-hidden", "false");
+  haptic("tap");
+}
+
+function closeLibraryPortal() {
+  const portal = document.getElementById("library-category-portal");
+  if (!portal) return;
+  portal.classList.remove("open", "dragging");
+  portal.style.transform = "";
+  portal.style.opacity = "";
+  portal.setAttribute("aria-hidden", "true");
+}
+
+function selectPortalCategory(tab) {
+  closeLibraryPortal();
+  selectLibraryTab(tab);
+  const sc = document.getElementById("library-scroll-container");
+  if (sc && sc.scrollTo) sc.scrollTo({ top: 0, behavior: state.settings.reduceMotion ? "auto" : "smooth" });
+  else if (sc) sc.scrollTop = 0;
+}
+function openPortalQueue() { closeLibraryPortal(); expandNowPlayingScreen(); switchPlayerStage("queue"); }
+function openPortalSearch() { closeLibraryPortal(); showSearchSheet(); }
+
+function showSwipePeek(text) {
+  const p = document.getElementById("library-swipe-peek");
+  if (!p) return;
+  p.textContent = text || "Library Home";
+  p.classList.add("visible");
+  clearTimeout(showSwipePeek._t);
+  showSwipePeek._t = setTimeout(() => p.classList.remove("visible"), 700);
+}
+
+function attachLibrarySwipePortal() {
+  const sc = document.getElementById("library-scroll-container");
+  if (!sc || sc.dataset.portalSwipeArmed) return;
+  sc.dataset.portalSwipeArmed = "1";
+  sc.addEventListener("touchstart", e => {
+    if (!e.touches || e.touches.length !== 1 || listPinchActive) return;
+    const t = e.touches[0];
+    librarySwipe = { sx: t.clientX, sy: t.clientY, active: true, tracking: false, dx: 0, fromPortal: false };
+  }, { passive: true });
+  sc.addEventListener("touchmove", e => {
+    if (!librarySwipe.active || !e.touches || e.touches.length !== 1 || listPinchActive) return;
+    const t = e.touches[0];
+    const dx = t.clientX - librarySwipe.sx;
+    const dy = t.clientY - librarySwipe.sy;
+    if (!librarySwipe.tracking && Math.abs(dx) > 18 && Math.abs(dx) > Math.abs(dy) * 1.35) librarySwipe.tracking = true;
+    if (!librarySwipe.tracking) return;
+    e.preventDefault();
+    librarySwipe.dx = dx;
+    if (dx < -28) showSwipePeek("Library Home");
+    else if (dx > 38 && state.songs.length) showSwipePeek("Now Playing");
+  }, { passive: false });
+  sc.addEventListener("touchend", () => {
+    if (librarySwipe.tracking) {
+      if (librarySwipe.dx < -72) openLibraryPortal();
+      else if (librarySwipe.dx > 88 && state.songs.length) expandNowPlayingScreen();
+    }
+    librarySwipe.active = false; librarySwipe.tracking = false; librarySwipe.dx = 0;
+  }, { passive: true });
+  sc.addEventListener("touchcancel", () => { librarySwipe.active = false; librarySwipe.tracking = false; }, { passive: true });
+}
+
+function portalSwipeStart(e) {
+  if (!e.touches || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  portalSwipe = { sx: t.clientX, sy: t.clientY, active: true, dx: 0 };
+}
+function portalSwipeMove(e) {
+  if (!portalSwipe.active || !e.touches || e.touches.length !== 1) return;
+  const portal = document.getElementById("library-category-portal");
+  const t = e.touches[0];
+  const dx = t.clientX - portalSwipe.sx;
+  const dy = t.clientY - portalSwipe.sy;
+  if (dx > 8 && Math.abs(dx) > Math.abs(dy) * 1.25) {
+    e.preventDefault();
+    portalSwipe.dx = dx;
+    const x = Math.min(180, dx * 0.62);
+    if (portal) {
+      portal.classList.add("dragging");
+      portal.style.transform = `translate3d(${x}px, 0, 0)`;
+      portal.style.opacity = String(Math.max(0.45, 1 - x / 260));
+    }
+  }
+}
+function portalSwipeEnd() {
+  const portal = document.getElementById("library-category-portal");
+  if (portal) {
+    portal.classList.remove("dragging");
+    portal.style.transform = "";
+    portal.style.opacity = "";
+  }
+  if (portalSwipe.active && portalSwipe.dx > 74) closeLibraryPortal();
+  portalSwipe.active = false; portalSwipe.dx = 0;
+}
+
+function renderGenreCards() {
+  const target = document.getElementById("library-render-target");
+  const entries = genreIndexEntries();
+  target.innerHTML = `
+    <div class="drilldown-header-card" style="align-items:center;">
+      <div class="drilldown-info-col">
+        <div class="drilldown-main-title">Genres</div>
+        <div class="drilldown-sub-text">${entries.length} genres • ${formatDuration(sumSongDuration(libraryTracks()))}</div>
+      </div>
+    </div>
+    <div class="album-cards-grid" id="genres-cards-container"></div>`;
+  const grid = document.getElementById("genres-cards-container");
+  renderWindowedGrid(grid, entries, e => {
+    const first = e.songs[0] || {};
+    return `
+      <div class="album-thumb-container">
+        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
+      </div>
+      <div class="album-title-text">${escHtml(e.name)}</div>
+      <div class="album-artist-text">${e.songs.length} tracks • ${formatDuration(e.duration || sumSongDuration(e.songs))}</div>`;
+  }, `<div style="padding:24px 14px; color:var(--text-tertiary); font-size:12px; text-align:center;">No genre tags found</div>`);
+  grid.addEventListener("click", ev => {
+    const card = ev.target.closest(".album-unit-box");
+    if (!card) return;
+    const e = entries[parseInt(card.dataset.entryIdx, 10)];
+    if (e) renderGenreDetailView(e.name, e.songs);
+  }, { passive: true });
+}
+
+function renderGenreDetailView(genreName, list) {
+  const target = document.getElementById("library-render-target");
+  const sorted = contextSortSongs(list || []);
+  const totalSecs = sumSongDuration(sorted);
+  target.innerHTML = `
+    <div style="padding: 10px 14px 4px 14px;">
+      <button class="btn-import-header" style="height: 28px; padding: 0 10px; font-size: 11px;" onclick="selectLibraryTab('genres')">
+        <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg> Back to Genres
+      </button>
+    </div>
+    <div class="drilldown-header-card">
+      <div class="drilldown-info-col">
+        <div class="drilldown-main-title">${escHtml(genreName)}</div>
+        <div class="drilldown-sub-text">${sorted.length} tracks • ${formatDuration(totalSecs)}</div>
+        <div class="drilldown-buttons-row">
+          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playGenreTracks(${quote(genreName)}, false)">Play</button>
+          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playGenreTracks(${quote(genreName)}, true)">Shuffle</button>
+        </div>
+      </div>
+    </div>
+    <div id="genre-tracks-holder"></div>`;
+  renderSongsCatalog(sorted, "No tracks", document.getElementById("genre-tracks-holder"));
+}
+
+function playGenreTracks(genreName, shuffle = false) {
+  let songs = libraryTracks().filter(s => cleanContextLabel(s.genre && s.genre !== "Folder Audio" ? s.genre : "Unknown Genre", "Unknown Genre") === genreName);
+  songs = contextSortSongs(songs);
+  if (shuffle) songs.sort(() => Math.random() - 0.5);
+  if (!songs.length) return;
+  state.queue = songs.slice();
+  const first = state.queue.shift();
+  const idx = resolveSongIndex(first);
+  if (idx !== -1) loadTrack(idx, true);
+  displayToast(`${shuffle ? "Shuffling" : "Playing"} genre: ${genreName}`);
+}
+
 /* =========================================================================
    LIBRARY VIEWS & TAB SWITCHING
    ========================================================================= */
@@ -5888,6 +6301,8 @@ function renderLibraryTab() {
     renderSongsCatalog(rec);
   } else if (tab === "folders") {
     renderFolderBrowser();
+  } else if (tab === "genres") {
+    renderGenreCards();
   } else if (tab === "lists") {
     renderPlaylistsView();
   } else if (tab === "history") {

@@ -209,3 +209,15 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Removed duplicate pinch touchmove path and moved preview updates through requestAnimationFrame.
 - Preserved strict mini-player collision zones, category swipes, folder scans, refresh, and large-library persistence.
 - Rebuilt signed APK as versionCode 28 / versionName 1.27.
+
+## v1.28 — major swipe-in Library Home portal
+
+- Added a Poweramp-style swipe-left Library Home portal with animated category cards.
+- Portal categories: All Songs, Folders, Albums, Artists, Genres, Playlists, Favorites, Recently Played, Queue, and Search.
+- Swipe right from library lists quickly returns to Now Playing when a track is loaded.
+- Swipe right inside the portal fluidly closes it back to the library/mini-player layer.
+- Portal includes live drag feedback, staggered card entrance, tinted glass cards, and sticky current-track return.
+- Added real Genre browsing with genre grid, genre detail, play genre, and shuffle genre.
+- Fixed portal scroll fallback for WebViews/environments without smooth scrollTo.
+- Preserved mini-player gestures, pinch sizing, player lyrics/artwork gestures, folder scans, refresh, persistence, and strict mini-player layout zones.
+- Rebuilt signed APK as versionCode 29 / versionName 1.28.

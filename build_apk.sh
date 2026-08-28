@@ -21,8 +21,8 @@ $SDK_TOOLS/aapt2 link -o "$TEMP_DIR/base.apk" \
   --java "$PROJECT_DIR/gen" \
   --min-sdk-version 21 \
   --target-sdk-version 34 \
-  --version-code 28 \
-  --version-name "1.27" \
+  --version-code 29 \
+  --version-name "1.28" \
   "$TEMP_DIR/compiled.zip"
 
 echo "3. Compiling Java sources..."

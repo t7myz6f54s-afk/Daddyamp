@@ -166,3 +166,15 @@ Researched Poweramp player/list gestures and implemented the next interaction pa
 - Pinch threshold was reduced slightly and the code now uses one requestAnimationFrame-backed move pipeline instead of duplicate touchmove handlers.
 - On release, the list density changes once and persists; this should avoid lag on large libraries.
 - Kept all previous large-library, folder scan, mini-player collision, category swipe, and playback behavior intact.
+
+## v1.28 major navigation update — swipe-in Library Home portal
+
+Implemented the major Poweramp-style navigation layer requested by the user:
+- Added a swipe-left Library Home portal, modeled after Poweramp's category-first Library Home Page and swipe-based list/player navigation.
+- Portal shows animated category cards for All Songs, Folders, Albums, Artists, Genres, Playlists, Favorites, Recently Played, Queue, and Search.
+- Swipe right from normal library lists quickly returns to Now Playing when a track exists.
+- Swipe right inside the Library Home portal fluidly closes it back to the previous list/mini-player layer.
+- Portal uses live drag feedback, staggered card entrance animations, glass/tinted cards, and a sticky current-track return card instead of a basic drawer.
+- Added real Genre browsing: genre grid, genre detail view, play genre, and shuffle genre.
+- Kept existing subnav tabs intact so older navigation muscle memory still works.
+- Preserved mini-player, player gestures, pinch list size, folder scans, refresh, persistence, and category skip behavior.
