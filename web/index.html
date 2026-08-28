@@ -2501,6 +2501,24 @@ html.reduce-motion #player-artwork-img { animation: none !important; }
 html:not(.is-breathing) .np-eq i { animation: none; height: 42%; }
 html.reduce-motion .np-eq i { animation: none !important; height: 42% !important; }
 
+
+/* POWERAMP SEAMLESS REFINEMENT PASS: calmer motion, stronger touch feedback, less clunk */
+.song-catalog-row, .folder-row-item, .folder-root-card, .album-unit-box {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.song-catalog-row:active, .folder-row-item:active, .folder-root-card:active, .album-unit-box:active {
+  transform: scale(0.988);
+  background-color: rgba(255,255,255,0.075);
+}
+.btn-action-tap:active, .transport-btn-round:active, .mini-master-play-btn:active {
+  transform: scale(0.92);
+}
+.player-audio-tech-chip { cursor: pointer; user-select: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
 </style>
 </head>
 <body>
@@ -2711,7 +2729,7 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
 
       <div class="player-context-center">
         <div class="player-playlist-name" id="player-context-tag">Playing from Library</div>
-        <div class="player-audio-tech-chip" id="player-specs-chip">
+        <div class="player-audio-tech-chip" id="player-specs-chip" onclick="cycleAudioInfoChip()" title="Tap to cycle audio info">
           WAV • 1411 kbps • 44.1 kHz
         </div>
       </div>
@@ -4004,11 +4022,45 @@ function hydrateIdlePlayerFromLibrary() {
   setAmbientArt(song.artwork || "artwork/default.png", true);
 }
 
+function updateAudioInfoChip() {
+  const el = document.getElementById("player-specs-chip");
+  if (!el) return;
+  const song = state.songs[state.currentIndex] || {};
+  const info = state.audioInfo || {};
+  const mode = state.audioInfoMode % 4;
+  if (mode === 1) el.textContent = `${formatDuration(state.currentTime)} / ${formatDuration(state.duration)} • ${state.songs.length} tracks`;
+  else if (mode === 2) el.textContent = `${song.artist || 'Unknown Artist'} • ${song.album || 'Library'}`;
+  else if (mode === 3) el.textContent = `${info.fileName || (song.docName || 'Audio file')}`;
+  else el.textContent = `${info.formatTag || 'AUDIO'} • ${info.bitrateText || 'Unknown bitrate'} • ${info.sampleRateText || '44,100 Hz'}`;
+}
+
+function cycleAudioInfoChip() {
+  state.audioInfoMode = (state.audioInfoMode + 1) % 4;
+  updateAudioInfoChip();
+  haptic("tap");
+}
+
+function attachLongPressContext(el, song) {
+  if (!el || !song) return;
+  let timer = null;
+  let fired = false;
+  const clear = () => { if (timer) clearTimeout(timer); timer = null; };
+  const start = (ev) => {
+    fired = false; clear();
+    timer = setTimeout(() => { fired = true; haptic("tap"); triggerTrackMenu(song); }, 520);
+  };
+  el.addEventListener("touchstart", start, { passive: true });
+  el.addEventListener("mousedown", start);
+  ["touchmove", "touchend", "touchcancel", "mouseup", "mouseleave"].forEach(type => el.addEventListener(type, clear, { passive: true }));
+  el.addEventListener("click", e => { if (fired) { e.preventDefault(); e.stopPropagation(); fired = false; } }, true);
+}
+
 function loadTrack(index, autoPlay = true, preSeekMs = null) {
   if (index < 0 || index >= state.songs.length) return;
   const song = ensureTrackId(state.songs[index]);
   if (!song) return;
   state.currentIndex = index;
+  state.loadedPath = currentSongUri(song);
   const gen = ++playGen;
   state.playGen = gen;
   state.pendingSeekGen = gen; // this load owns any pending seek until applied
@@ -4082,7 +4134,8 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   document.getElementById("spec-val-pipeline").textContent = isAndroid ? "Android MediaPlayer (AudioFX HAL)" : "HTML5 Web Audio Biquad DSP";
   document.getElementById("spec-val-plays").textContent = song.play_count || 1;
 
-  document.getElementById("player-specs-chip").textContent = `${formatTag} • ${bitrateText} • ${sampleRateText}`;
+  state.audioInfo = { formatTag, bitrateText, sampleRateText, bitDepthText, fileName, codecText };
+  updateAudioInfoChip();
   document.getElementById("deck-format-middle").textContent = `${sampleRateText.toUpperCase()} • ${bitDepthText.toUpperCase()}`;
 
   state.duration = song.duration || 30;
@@ -4173,6 +4226,11 @@ function togglePlayPauseState() {
     return;
   }
   if (!state.isPlaying) {
+    const selectedPath = currentSongUri(curSong);
+    if (!state.loadedPath || state.loadedPath !== selectedPath) {
+      loadTrack(state.currentIndex, true);
+      return;
+    }
     initWebAudioDsp();
     if (isAndroid) {
       window.AndroidBridge.resumeAudio();
@@ -4207,6 +4265,7 @@ function updatePlayButtonVisuals(playing) {
     btn.classList.toggle("is-playing", !!playing);
   });
   document.documentElement.classList.toggle("is-breathing", !!playing && !state.settings.reduceMotion);
+  if (typeof updateActivePlayingRowInDOM === "function") updateActivePlayingRowInDOM();
 }
 
 function executePlayNext() {
@@ -4472,6 +4531,7 @@ function updateTimerDisplays() {
   if (elapsedStr !== lastRenderedTimeStr) {
     lastRenderedTimeStr = elapsedStr;
     document.getElementById("player-time-elapsed").textContent = elapsedStr;
+    if (state.audioInfoMode === 1) updateAudioInfoChip();
 
     const totalBtn = document.getElementById("player-time-remaining");
     if (state.showRemainingTime) {
@@ -4862,6 +4922,7 @@ function resumeLyricAutoFollow() {
 }
 
 function queryLrclib(song) {
+  if (!window.fetch) { parseLrcText(""); return; }
   const q = encodeURIComponent(`${song.artist} ${song.title}`);
   const gen = state.playGen;
   fetch(`https://lrclib.net/api/search?q=${q}`)
@@ -6636,8 +6697,17 @@ function restoreSession() {
   state.shuffle = !!s.shuffle;
   state.repeatMode = typeof s.repeat === "number" ? s.repeat : 0;
   const autoPlay = s.playing === true && state.songs[idx] && state.songs[idx].path === s.path;
-  loadTrack(idx, autoPlay, s.time ? Math.max(0, Math.floor(s.time * 1000)) : null);
-  if (!autoPlay) displayToast(`Restored — ${state.songs[idx].title}`);
+  if (autoPlay) {
+    loadTrack(idx, true, s.time ? Math.max(0, Math.floor(s.time * 1000)) : null);
+  } else {
+    state.currentIndex = idx;
+    state.currentTime = Math.max(0, Number(s.time || 0));
+    state.duration = Number(s.duration || state.songs[idx].duration || 0);
+    state.loadedPath = ""; // native player is not loaded after process restart
+    hydrateIdlePlayerFromLibrary();
+    updateTimerDisplays();
+    displayToast(`Restored — ${state.songs[idx].title}`);
+  }
 }
 
 /* -------------------------------------------------------------- haptics */
@@ -7085,6 +7155,9 @@ function attachCoverGestures() {
   const box = document.querySelector(".artwork-frame-box");
   if (!box || box.dataset.gestures) return;
   box.dataset.gestures = "1";
+  let lpTimer = null;
+  box.addEventListener("touchstart", () => { lpTimer = setTimeout(() => triggerTrackMenu(state.songs[state.currentIndex]), 560); }, { passive: true });
+  ["touchmove", "touchend", "touchcancel"].forEach(t => box.addEventListener(t, () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; }, { passive: true }));
   let sx = 0, sy = 0, active = false;
   box.addEventListener("touchstart", e => {
     if (e.touches.length !== 1) return;
@@ -7211,7 +7284,7 @@ function songRowTrailingHtml(s) {
       <button class="btn-inline-heart ${s.favorite ? 'liked' : ''}" onclick="event.stopPropagation(); toggleRowFavorite(${s.id})">
         <svg class="icon icon-md" viewBox="0 0 24 24">${s.favorite ? '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/>' : '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>'}</svg>
       </button>
-      <button class="btn-action-tap" onclick="event.stopPropagation(); triggerTrackMenu(state.songs.find(x => x && x.id != null && x.id === ${s.id}))">
+      <button class="btn-action-tap" onclick="event.stopPropagation(); triggerTrackMenuById(this.closest('.song-catalog-row').dataset.songId)">
         <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
       </button>
     </div>`;
@@ -7243,6 +7316,7 @@ function buildSongRow(s, rowIndex) {
     eq.innerHTML = "<i></i><i></i><i></i>";
     row.querySelector(".row-duration-digits")?.before(eq);
   }
+  attachLongPressContext(row, s);
   return row;
 }
 
@@ -7808,6 +7882,11 @@ function showSettingsSheet() {
   document.getElementById("sheet-mask-settings").classList.add("open");
 }
 
+function triggerTrackMenuById(id) {
+  const idx = resolveSongByID(id);
+  if (idx !== -1) triggerTrackMenu(state.songs[idx]);
+}
+
 function triggerTrackMenu(song) {
   if (!song) return;
   state.targetContextSong = song;
@@ -8089,6 +8168,19 @@ function miniSwipeEnd(e) {
   miniSwipeAccumDelta = 0;
 }
 
+function refreshMusicPermanently() {
+  // Poweramp-like refresh: refresh every enabled folder root plus Android
+  // MediaStore. Both paths persist into IndexedDB, so results survive restart.
+  let kicked = false;
+  try {
+    if (folderState && folderState.roots && folderState.roots.length) {
+      folderState.roots.forEach(r => { if (r.enabled) { startFolderScan(r.uri, false); kicked = true; } });
+    }
+  } catch (e) {}
+  try { invokeDeviceScan(); kicked = true; } catch (e) {}
+  displayToast(kicked ? "Refreshing music library…" : "No library roots to refresh");
+}
+
 /* =========================================================================
    PULL-TO-REFRESH ON LIBRARY
    ========================================================================= */
@@ -8130,7 +8222,7 @@ if (libScroll) {
         const svg = indicator.querySelector("svg");
         if (svg) svg.style.animation = "pullArrowBounce 0.25s ease-in-out infinite alternate";
       }
-      invokeDeviceScan();
+      refreshMusicPermanently();
       setTimeout(() => {
         if (indicator) {
           indicator.classList.remove("visible");

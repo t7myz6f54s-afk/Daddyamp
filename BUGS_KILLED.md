@@ -105,3 +105,14 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Fixed false playing animation on app open: rows only show the playing/equalizer animation when audio is actually playing, not just because currentIndex points at a remembered song.
 - Reset now clears the large IndexedDB catalogs too.
 - Rebuilt signed APK as versionCode 18 / versionName 1.17.
+
+## v1.18 — Poweramp seamless refinement pass
+
+- Added a Poweramp-style refinement map documenting what is strong, what still needs work, and the next refinement queue.
+- Startup/session restore refinement: non-playing restored sessions now hydrate UI cheaply instead of running full `loadTrack()` and causing lyrics/palette/native work on boot.
+- Fixed cold-boot play button: pressing play on a visually hydrated song now loads that track instead of trying to resume an empty native MediaPlayer.
+- Added tappable player audio-info chip cycling between format, time/library count, artist/album, and filename.
+- Added long-press context menu behavior for catalog rows and full-player artwork.
+- Pull-to-refresh now refreshes persistent folder roots plus Android MediaStore, so refreshed music remains after restart.
+- Added calmer Poweramp-like touch feedback and guarded LRCLIB fetch for WebViews/test environments without fetch.
+- Rebuilt signed APK as versionCode 19 / versionName 1.18.
