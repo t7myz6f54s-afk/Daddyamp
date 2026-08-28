@@ -52,7 +52,7 @@ public class FolderEngine extends SQLiteOpenHelper {
 
     /** Lightweight MediaStore row for the fast path (no file opens). */
     private static class MsMeta {
-        String title, artist, album, mime, data;
+        String title, artist, album, genre, mime, data;
         long id, albumId, durationMs;
         int year, track;
     }
@@ -445,7 +445,7 @@ public class FolderEngine extends SQLiteOpenHelper {
                     MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID,
                     MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.YEAR,
                     MediaStore.Audio.Media.MIME_TYPE, MediaStore.Audio.Media.DATA,
-                    MediaStore.Audio.Media.TRACK
+                    MediaStore.Audio.Media.TRACK, MediaStore.Audio.Media.GENRE
             };
             String selection = null;
             String[] selArgs = null;
@@ -470,6 +470,7 @@ public class FolderEngine extends SQLiteOpenHelper {
                     String data = c.getString(8);
                     m.data = data;
                     try { m.track = c.getInt(9); } catch (Exception ignored) { m.track = 0; }
+                    try { m.genre = c.getString(10); } catch (Exception ignored) { m.genre = ""; }
                     if (data == null || data.isEmpty()) continue;
                     map.put(data.toLowerCase(), m);
                 }
@@ -558,7 +559,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             song.put("title", m.title != null ? m.title : stripExt(name));
             song.put("artist", (m.artist != null && !m.artist.equals("<unknown>")) ? m.artist : "Unknown Artist");
             song.put("album", (m.album != null && !m.album.isEmpty()) ? m.album : (rootName != null ? rootName : "Folder Audio"));
-            song.put("albumArtist", ""); song.put("genre", "Folder Audio");
+            song.put("albumArtist", ""); song.put("genre", (m.genre != null && !m.genre.equals("<unknown>") && !m.genre.isEmpty()) ? m.genre : "");
             song.put("year", m.year > 0 && m.year < 3000 ? m.year : 0);
             song.put("duration", m.durationMs / 1000); song.put("trackNumber", normalizeTrackNumber(m.track)); song.put("mimeType", m.mime != null ? m.mime : "audio/mpeg");
             song.put("size", 0); song.put("mtime", 0);
@@ -584,7 +585,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             song.put("artist", (artist != null && !artist.equals("<unknown>")) ? artist : "Unknown Artist");
             song.put("album", (album != null && !album.isEmpty()) ? album : fallbackAlbum);
             song.put("albumArtist", "");
-            song.put("genre", "Folder Audio");
+            song.put("genre", (m.genre != null && !m.genre.equals("<unknown>") && !m.genre.isEmpty()) ? m.genre : "");
             song.put("year", m.year > 0 && m.year < 3000 ? m.year : 0);
             song.put("duration", m.durationMs / 1000);
             song.put("trackNumber", normalizeTrackNumber(m.track));
@@ -680,7 +681,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             song.put("artist", (artist != null && !artist.equals("<unknown>")) ? artist : "Unknown Artist");
             song.put("album", (album != null && !album.isEmpty()) ? album : fallbackAlbum);
             song.put("albumArtist", (albumArtist != null && !albumArtist.equals("<unknown>")) ? albumArtist : "");
-            song.put("genre", genre != null && !genre.equals("<unknown>") && !genre.isEmpty() ? genre : "Folder Audio");
+            song.put("genre", genre != null && !genre.equals("<unknown>") && !genre.isEmpty() ? genre : "");
             song.put("year", yearS != null ? parseIntSafe(yearS) : 0);
             song.put("duration", durMs / 1000);
             song.put("trackNumber", parseTrackNumber(trackS));

@@ -234,3 +234,18 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Added portal handling to Android back action.
 - 10k-track smoke test showed openLibraryPortal sync time around 1 ms after priming, with all 10 cards and counts intact.
 - Rebuilt signed APK as versionCode 30 / versionName 1.29.
+
+## v1.30 — smart genres + large-library smoothness
+
+- Fixed Genres collapsing into generic Local/Device/Folder buckets.
+- Android device scanner now reads MediaStore genre tags instead of hardcoding Device Audio.
+- Folder fast-scan now reads MediaStore genre tags.
+- Folder retriever fallback now allows missing genres to be inferred instead of forcing Folder Audio.
+- Added smart genre normalization and alias cleanup for common tags like hip-hop/rap, R&B, EDM/electronic, lo-fi, soundtrack, qawwali, naat, nasheed, Quran, etc.
+- Added deterministic local genre inference from title, artist, album, path, filename, and folder names when metadata is missing/generic.
+- Existing persisted tracks and new imports/scans are classified through the smart genre pipeline.
+- Genre index is cached by songs revision for faster reopen.
+- Huge libraries now disable per-row/card entrance animations to reduce clunky scrolling.
+- Initial catalog mount now uses smaller dynamic chunks on 1k/3k+ libraries plus DocumentFragment batching.
+- 10k-track smoke verified multiple genre buckets, 64-row initial mount, large-library smoothness class, and ~1 ms cached portal open.
+- Rebuilt signed APK as versionCode 31 / versionName 1.30.

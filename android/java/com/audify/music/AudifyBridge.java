@@ -1265,7 +1265,8 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                     MediaStore.Audio.Media.ALBUM_ID,
                     MediaStore.Audio.Media.YEAR,
                     MediaStore.Audio.Media.MIME_TYPE,
-                    MediaStore.Audio.Media.TRACK
+                    MediaStore.Audio.Media.TRACK,
+                    MediaStore.Audio.Media.GENRE
             };
 
             String selection = MediaStore.Audio.Media.IS_MUSIC + " != 0";
@@ -1293,6 +1294,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 int yearCol = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR);
                 int mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE);
                 int trackCol = cursor.getColumnIndex(MediaStore.Audio.Media.TRACK);
+                int genreCol = cursor.getColumnIndex(MediaStore.Audio.Media.GENRE);
 
                 while (cursor.moveToNext()) {
                     long id = cursor.getLong(idCol);
@@ -1305,6 +1307,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                     int year = yearCol != -1 ? cursor.getInt(yearCol) : 2026;
                     String mime = mimeCol != -1 ? cursor.getString(mimeCol) : "audio/mpeg";
                     int trackNo = trackCol != -1 ? cursor.getInt(trackCol) : 0;
+                    String genre = genreCol != -1 ? cursor.getString(genreCol) : "";
 
                     Uri contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
                     Uri albumArtUri = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId);
@@ -1314,7 +1317,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                     song.put("title", title != null ? title : "Unknown Track");
                     song.put("artist", artist != null && !artist.equals("<unknown>") ? artist : "Unknown Artist");
                     song.put("album", album != null ? album : "Unknown Album");
-                    song.put("genre", "Device Audio");
+                    song.put("genre", genre != null && !genre.equals("<unknown>") ? genre : "");
                     song.put("year", year > 0 ? year : 2026);
                     song.put("duration", duration > 0 ? duration / 1000 : 0);
                     song.put("trackNumber", normalizeTrackNumber(trackNo));

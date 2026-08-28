@@ -191,3 +191,18 @@ Fixed the user's reported portal lag/unusable swipe behavior:
 - Reduced expensive visual effects during the portal transition: lighter shadows, shorter stagger, containment, and will-change/backface layer hints.
 - Added Android back handling for the portal.
 - 10k-track JSDOM performance smoke: openLibraryPortal synchronous path dropped to ~1 ms after priming; portal still renders 10 cards and updates counts correctly.
+
+## v1.30 major polish — smart genres + large-library smoothness
+
+Implemented a major bug-kill/performance pass based on the user's feedback:
+- Fixed Genres showing as only generic Local/Device/Folder buckets.
+- Native Android device MediaStore scan now carries real MediaStore genre tags into JS instead of hardcoding Device Audio.
+- Native folder MediaStore fast-scan now carries real MediaStore genre tags too.
+- Folder retriever fallback now emits blank genre when no real tag exists, letting JS infer instead of collapsing everything into Folder Audio.
+- Added smart genre normalization: aliases such as hip hop/rap, rnb/R&B, edm/dance, lofi, soundtrack, qawwali, naat, nasheed, Quran, etc. collapse into clean genre names.
+- Added fast local genre inference from title/artist/album/folder/path when tags are missing or generic. This uses deterministic heuristics only; it does not upload audio or call an online AI service.
+- Existing persisted tracks are normalized/inferred on load, and newly imported/device/folder tracks are classified on ingestion.
+- Genre index is now cached by songs revision instead of rebuilt every time.
+- Huge libraries now get a large-library smoothness mode: row/card entrance animations are disabled after 1200 tracks.
+- Initial row mount was reduced dynamically for large libraries and now uses DocumentFragment batching to cut layout churn.
+- 10k-track smoke: initial mounted rows reduced to 64, large-library class enabled, portal open stayed ~1 ms, and smart genre view produced multiple useful genres.

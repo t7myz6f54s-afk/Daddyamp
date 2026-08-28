@@ -2694,6 +2694,16 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
 
 
 
+
+/* Large-library smoothness: no per-row entrance animation once catalog is huge */
+html.large-library .song-catalog-row,
+html.large-library .album-unit-box {
+  animation: none !important;
+}
+html.large-library .song-catalog-row {
+  transition: background 80ms linear;
+}
+
 /* v1.28 Library Home portal — Poweramp-like category surface */
 #library-category-portal {
   position: fixed;
@@ -4282,7 +4292,7 @@ function loadPersistedData() {
     if (imported) {
       const parsed = JSON.parse(imported);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        state.songs = [...parsed];
+        state.songs = applySmartGenres([...parsed]);
         bumpSongsRev();
       }
     }
@@ -4371,6 +4381,7 @@ function refreshBadges() {
   const listsTag = document.getElementById("tag-lists-count");
   if (listsTag) listsTag.textContent = state.playlists.length;
 
+  document.documentElement.classList.toggle("large-library", _badges.tracks > 1200);
   document.getElementById("summary-meta-line").textContent = `${_badges.tracks} SONGS • DADDYAMP LOCAL LIBRARY`;
   document.getElementById("label-quick-meta").textContent = `${_badges.tracks} TRACKS AVAILABLE`;
   if (typeof updatePortalCountsOnly === "function" && _portalPrimed) updatePortalCountsOnly();
@@ -6034,23 +6045,116 @@ function collapseNowPlayingScreen() {
 
 
 /* =========================================================================
+   SMART GENRE NORMALIZATION — tags first, then fast local inference
+   ========================================================================= */
+const GENERIC_GENRE_LABELS = new Set([
+  "", "local", "local device", "device", "device audio", "folder", "folder audio",
+  "imported", "imported audio", "audio", "music", "unknown", "unknown genre",
+  "uncategorized", "uncategorised", "other", "misc", "miscellaneous"
+]);
+const GENRE_ALIASES = {
+  "hip hop": "Hip-Hop/Rap", "hip-hop": "Hip-Hop/Rap", "rap": "Hip-Hop/Rap", "trap": "Hip-Hop/Rap",
+  "rnb": "R&B/Soul", "r&b": "R&B/Soul", "soul": "R&B/Soul",
+  "edm": "Electronic", "dance": "Electronic", "electronic": "Electronic", "electronica": "Electronic", "techno": "Electronic", "house": "Electronic", "trance": "Electronic", "dubstep": "Electronic", "synthwave": "Electronic",
+  "rock": "Rock", "alt rock": "Rock", "alternative": "Alternative", "indie": "Indie", "metal": "Metal", "punk": "Punk",
+  "pop": "Pop", "kpop": "K-Pop", "k-pop": "K-Pop", "jpop": "J-Pop", "j-pop": "J-Pop",
+  "jazz": "Jazz", "blues": "Blues", "classical": "Classical", "orchestra": "Classical", "piano": "Classical",
+  "country": "Country", "folk": "Folk", "acoustic": "Acoustic", "reggae": "Reggae", "latin": "Latin",
+  "bollywood": "Bollywood", "soundtrack": "Soundtrack", "ost": "Soundtrack", "score": "Soundtrack",
+  "qawwali": "Qawwali", "ghazal": "Ghazal", "nasheed": "Nasheed", "naat": "Naat", "hamd": "Naat",
+  "lofi": "Lo-Fi", "lo-fi": "Lo-Fi", "ambient": "Ambient", "chill": "Chill", "sleep": "Ambient",
+  "podcast": "Podcast", "audiobook": "Audiobook", "lecture": "Lecture", "quran": "Quran", "tilawat": "Quran"
+};
+const GENRE_RULES = [
+  ["Quran", ["quran", "tilawat", "recitation", "surah", "ayat", "mishary", "sudais", "abdul basit"]],
+  ["Naat", ["naat", "hamd", "milad", "salam", "madina", "mustafa", "rasool"]],
+  ["Nasheed", ["nasheed", "anashid", "islamic song"]],
+  ["Qawwali", ["qawwali", "nusrat", "rahat fateh", "sabri"]],
+  ["Ghazal", ["ghazal", "jagjit", "mehdi hassan", "ghulam ali"]],
+  ["Bollywood", ["bollywood", "hindi", "arijit", "atif aslam", "udit", "alka yagnik", "shreya", "jubin", "pritam", "sonu nigam"]],
+  ["Hip-Hop/Rap", ["hip hop", "hip-hop", " rap", "trap", "drill", "freestyle", "eminem", "tupac", "drake", "kendrick", "talha", "young stunners"]],
+  ["Electronic", ["edm", "electronic", "remix", "club", "techno", "house", "trance", "dubstep", "synthwave", "dj "]],
+  ["Rock", ["rock", "guitar", "linkin park", "nirvana", "coldplay", "queen", "metallica", "ac/dc"]],
+  ["Metal", ["metal", "metalcore", "deathcore", "slipknot", "iron maiden"]],
+  ["Jazz", ["jazz", "sax", "saxophone", "bebop", "swing"]],
+  ["Classical", ["classical", "symphony", "orchestra", "mozart", "beethoven", "bach", "chopin", "violin sonata"]],
+  ["R&B/Soul", ["r&b", "rnb", "soul", "the weeknd", "bruno mars", "usher"]],
+  ["Country", ["country", "nashville", "johnny cash", "taylor swift - tim mcgraw"]],
+  ["Reggae", ["reggae", "bob marley", "dancehall"]],
+  ["Folk", ["folk", "acoustic", "sufiyana", "coke studio"]],
+  ["Ambient", ["ambient", "meditation", "sleep music", "rain sounds", "nature sounds"]],
+  ["Lo-Fi", ["lofi", "lo-fi", "chillhop", "study beats"]],
+  ["Podcast", ["podcast", "episode", "interview", "radio show"]],
+  ["Audiobook", ["audiobook", "chapter ", "book "]],
+  ["K-Pop", ["k-pop", "kpop", "bts", "blackpink", "twice", "stray kids"]],
+  ["Pop", [" pop", "single", "taylor swift", "dua lipa", "ed sheeran", "justin bieber", "billie eilish", "selena gomez"]]
+];
+function normalizeGenreTag(raw) {
+  let val = String(raw || "").trim();
+  if (!val) return "";
+  val = val.replace(/^\((\d+)\)$/g, "").replace(/\u0000/g, " ").trim();
+  const first = val.split(/[;,/|]+/).map(x => x.trim()).find(Boolean) || val;
+  const key = first.toLowerCase().replace(/[_.-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (GENERIC_GENRE_LABELS.has(key)) return "";
+  if (GENRE_ALIASES[key]) return GENRE_ALIASES[key];
+  return first.replace(/\b\w/g, c => c.toUpperCase()).replace(/\bAnd\b/g, "and");
+}
+function inferGenreFromSong(song) {
+  const text = [song.title, song.artist, song.album, song.genre, song.folderPath, song.docName, song.filePath, song.path]
+    .filter(Boolean).join(" ").toLowerCase().replace(/[_\-.]+/g, " ");
+  for (const [genre, keys] of GENRE_RULES) {
+    if (keys.some(k => text.includes(k))) return genre;
+  }
+  return "Unsorted";
+}
+function smartGenreOf(song) {
+  if (!song) return "Unsorted";
+  const tagged = normalizeGenreTag(song.genre);
+  return tagged || inferGenreFromSong(song);
+}
+function applySmartGenre(song) {
+  if (!song) return song;
+  const raw = song.genre || "";
+  const tagged = normalizeGenreTag(raw);
+  const smart = tagged || inferGenreFromSong(song);
+  song.genreRaw = raw || song.genreRaw || "";
+  song.genre = smart || "Unsorted";
+  song.genreSource = tagged ? "tag" : (song.genre === "Unsorted" ? "unsorted" : "inferred");
+  return song;
+}
+function applySmartGenres(list) {
+  (list || []).forEach(applySmartGenre);
+  return list;
+}
+
+/* =========================================================================
    LIBRARY CATEGORY PORTAL — swipe-left Library Home
    ========================================================================= */
 let librarySwipe = { sx: 0, sy: 0, active: false, tracking: false, dx: 0, fromPortal: false };
 let portalSwipe = { sx: 0, sy: 0, active: false, dx: 0 };
 
+let _genreIndex = { rev: -1, entries: [] };
 function genreIndexEntries() {
-  const map = {};
-  for (const s of libraryTracks()) {
-    const key = cleanContextLabel(s.genre && s.genre !== "Folder Audio" ? s.genre : "Unknown Genre", "Unknown Genre");
-    const arr = map[key] || (map[key] = { name: key, songs: [] });
-    arr.songs.push(s);
+  if (_genreIndex.rev !== state.songsRev) {
+    const map = {};
+    for (const s of libraryTracks()) {
+      const key = smartGenreOf(s);
+      const arr = map[key] || (map[key] = { name: key, songs: [] });
+      arr.songs.push(s);
+    }
+    const entries = Object.keys(map).map(k => {
+      map[k].songs = contextSortSongs(map[k].songs);
+      map[k].duration = sumSongDuration(map[k].songs);
+      map[k].inferred = map[k].songs.filter(s => s.genreSource === "inferred").length;
+      return map[k];
+    }).sort((a, b) => {
+      if (a.name === "Unsorted") return 1;
+      if (b.name === "Unsorted") return -1;
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+    });
+    _genreIndex = { rev: state.songsRev, entries };
   }
-  return Object.keys(map).map(k => {
-    map[k].songs = contextSortSongs(map[k].songs);
-    map[k].duration = sumSongDuration(map[k].songs);
-    return map[k];
-  }).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+  return _genreIndex.entries;
 }
 
 function portalIcon(kind) {
@@ -6337,7 +6441,7 @@ function renderGenreCards() {
         <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text">${escHtml(e.name)}</div>
-      <div class="album-artist-text">${e.songs.length} tracks • ${formatDuration(e.duration || sumSongDuration(e.songs))}</div>`;
+      <div class="album-artist-text">${e.songs.length} tracks • ${formatDuration(e.duration || sumSongDuration(e.songs))}${e.inferred ? ` • ${e.inferred} inferred` : ""}</div>`;
   }, `<div style="padding:24px 14px; color:var(--text-tertiary); font-size:12px; text-align:center;">No genre tags found</div>`);
   grid.addEventListener("click", ev => {
     const card = ev.target.closest(".album-unit-box");
@@ -6372,7 +6476,7 @@ function renderGenreDetailView(genreName, list) {
 }
 
 function playGenreTracks(genreName, shuffle = false) {
-  let songs = libraryTracks().filter(s => cleanContextLabel(s.genre && s.genre !== "Folder Audio" ? s.genre : "Unknown Genre", "Unknown Genre") === genreName);
+  let songs = libraryTracks().filter(s => smartGenreOf(s) === genreName);
   songs = contextSortSongs(songs);
   if (shuffle) songs.sort(() => Math.random() - 0.5);
   if (!songs.length) return;
@@ -7744,7 +7848,7 @@ function folderApplyToLibrary() {
   folderApplyToLibrary._rev = folderState.rev;
   folderApplyToLibrary._size = folderState.tracks.size;
   const prevUri = currentSongUri(state.songs[state.currentIndex]);
-  state.songs = state.songs.filter(s => s.source !== "folder").concat(folderSongs());
+  state.songs = state.songs.filter(s => s.source !== "folder").concat(applySmartGenres(folderSongs()));
   remapCurrentIndex(prevUri);
   bumpSongsRev();
   if (typeof refreshBadges === "function") refreshBadges();
@@ -7807,7 +7911,7 @@ async function folderInit() {
       folderState.tracks = new Map((tracks || []).map(t => [t.url, t]));
       if (Array.isArray(deviceTracks) && deviceTracks.length) {
         const manual = state.songs.filter(s => s.source !== "device" && s.source !== "folder");
-        state.songs = manual.concat(deviceTracks.map(t => ({ ...t, source: "device", imported: true })));
+        state.songs = manual.concat(applySmartGenres(deviceTracks.map(t => ({ ...t, source: "device", imported: true }))));
         bumpSongsRev();
       }
     }
@@ -8621,8 +8725,9 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
   const listEl = document.createElement("div");
   listEl.className = "song-rows-catalog";
   catalogCtx = { tracks, listEl, offset: 0, opts: opts || null };
-  buildCatalogRows(0, Math.min(tracks.length, CATALOG_CHUNK));
-  if (tracks.length > CATALOG_CHUNK) appendLoadMoreSentinel(listEl, "rows");
+  const firstChunk = catalogChunkSize(tracks.length);
+  buildCatalogRows(0, Math.min(tracks.length, firstChunk));
+  if (tracks.length > firstChunk) appendLoadMoreSentinel(listEl, "rows");
   target.appendChild(listEl);
   syncLoadMoreObservers();
   if (opts && opts.footerHtml) {
@@ -8633,8 +8738,9 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
   }
 }
 
-// ---- Virtualized catalog: only ~80 rows mounted; the rest stream in on scroll.
-const CATALOG_CHUNK = 160;
+// ---- Virtualized catalog: only a small first window mounts; the rest stream in on scroll.
+const CATALOG_CHUNK = 96;
+function catalogChunkSize(total) { return total > 3000 ? 64 : total > 1000 ? 80 : CATALOG_CHUNK; }
 let catalogCtx = null;
 let catalogIO = null;
 
@@ -8712,7 +8818,9 @@ function buildCatalogRows(from, to) {
   const ctx = catalogCtx;
   if (!ctx) return;
   to = Math.min(to, ctx.tracks.length);
-  for (let i = from; i < to; i++) ctx.listEl.appendChild(buildSongRow(ctx.tracks[i], i));
+  const frag = document.createDocumentFragment();
+  for (let i = from; i < to; i++) frag.appendChild(buildSongRow(ctx.tracks[i], i));
+  ctx.listEl.appendChild(frag);
   ctx.offset = Math.max(ctx.offset, to);
 }
 
@@ -8734,7 +8842,7 @@ function loadMoreCatalogRows() {
   const ctx = catalogCtx;
   if (!ctx || ctx.offset >= ctx.tracks.length) return 0;
   const from = ctx.offset;
-  const to = Math.min(from + CATALOG_CHUNK, ctx.tracks.length);
+  const to = Math.min(from + catalogChunkSize(ctx.tracks.length), ctx.tracks.length);
   buildCatalogRows(from, to);
   updateActivePlayingRowInDOM();
   if (ctx.offset >= ctx.tracks.length) {
@@ -8767,13 +8875,15 @@ function buildGridCells(from, to) {
   const ctx = gridCtx;
   if (!ctx) return;
   to = Math.min(to, ctx.items.length);
+  const frag = document.createDocumentFragment();
   for (let i = from; i < to; i++) {
     const cell = document.createElement("div");
     cell.className = "album-unit-box";
     cell.dataset.entryIdx = i;
     cell.innerHTML = ctx.cellHtmlFn(ctx.items[i], i);
-    ctx.container.appendChild(cell);
+    frag.appendChild(cell);
   }
+  ctx.container.appendChild(frag);
   ctx.offset = Math.max(ctx.offset, to);
 }
 
@@ -9043,6 +9153,7 @@ window.onAudioFilesImported = function(importedJson) {
   newSongs.forEach(s => {
     ensureTrackId(s);
     s.imported = true;
+    applySmartGenre(s);
     state.songs.unshift(s);
   });
   remapCurrentIndex(prevUri);
@@ -9078,7 +9189,7 @@ function receiveHtmlFiles(fileList) {
         title,
         artist,
         album,
-        genre: "Local",
+        genre: inferGenreFromSong({ title, artist, album, path: f.name }),
         year: 2026,
         duration,
         path: objectUrl,
@@ -9089,6 +9200,7 @@ function receiveHtmlFiles(fileList) {
         imported: true
       };
       ensureTrackId(rec);
+      applySmartGenre(rec);
       const prevUri = currentSongUri(state.songs[state.currentIndex]);
       state.songs.unshift(rec);
       remapCurrentIndex(prevUri);
@@ -9123,7 +9235,7 @@ function invokeDeviceScan() {
           title: ds.title,
           artist: ds.artist,
           album: ds.album,
-          genre: ds.genre || "Device Audio",
+          genre: ds.genre || ds.genreRaw || inferGenreFromSong(ds),
           year: ds.year || 2026,
           duration: ds.duration || 180,
           trackNumber: ds.trackNumber || ds.track || 0,
@@ -9141,6 +9253,7 @@ function invokeDeviceScan() {
           imported: true,
           source: "device"
         });
+        applySmartGenre(merged[merged.length - 1]);
       });
       state.songs = merged;
       remapCurrentIndex(prevUri);
