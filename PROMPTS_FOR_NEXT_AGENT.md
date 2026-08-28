@@ -596,3 +596,12 @@ Poweramp Music Folders (SAF roots, persistable permissions, IndexedDB catalog, c
 incremental scans, tree browser, restart-safe session), Living Now Playing (multi-color
 palette + 600ms crossfade, breath, haptics, cover gestures, mini hairline), nav =
 Library/EQ/Search/Menu, global search sheet, cyan accent. 119/119 smoke checks.
+
+
+## v1.10 — Bug-hunt & Poweramp polish (see BUGLOG.md)
+P0 lyrics/atmosphere fix (route-scoped living wall, one atmosphere no frozen clones,
+lyrics stays a layer, skip-in-lyrics updates art), scan heartbeat + fd-based tag reads
+(no more "scanning forever"), ~1s throttled merge/persist, removed backdrop-filter
+from the library scroll container (big lag source), tint blend-mode removed, palette
+crossOrigin fix for file:// folder art, broken-art fallback, folder-first empty state,
+now-playing accent + EQ bars, safe areas, lyrics copy. 131/131 checks.

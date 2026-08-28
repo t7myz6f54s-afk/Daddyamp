@@ -11,6 +11,7 @@ import android.media.MediaMetadataRetriever;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.util.Log;
@@ -212,6 +213,7 @@ public class FolderEngine extends SQLiteOpenHelper {
         final long startMs = System.currentTimeMillis();
 
         activeRootUri = treeUri;
+        lastEmitMs = System.currentTimeMillis();
         walk(tree, tree, "", known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs);
 
         // Removed files: known but not seen this pass
@@ -307,6 +309,7 @@ public class FolderEngine extends SQLiteOpenHelper {
                 seen.add(key);
                 current.put(key, mtime + "|" + size);
                 stats[0]++;
+                maybeHeartbeat(relPath, stats);
 
                 String knownMeta = known.get(key);
                 if (knownMeta != null && knownMeta.equals(mtime + "|" + size)) {
@@ -339,6 +342,7 @@ public class FolderEngine extends SQLiteOpenHelper {
     }
 
     private String activeRootUri = "";
+    private long lastEmitMs = 0;
     private void flushWalkBatch(JSONArray batch, int[] stats, String relPath) {
         if (batch.length() == 0) return;
         JSONObject o = new JSONObject();
@@ -350,8 +354,26 @@ public class FolderEngine extends SQLiteOpenHelper {
             o.put("currentPath", relPath);
             o.put("batch", batch);
         } catch (Exception ignored) {}
+        lastEmitMs = System.currentTimeMillis();
         emitProgress(activeRootUri, o);
         while (batch.length() > 0) batch.remove(0);
+    }
+
+    /** Emit a live heartbeat so the UI never looks frozen during long unchanged walks. */
+    private void maybeHeartbeat(String relPath, int[] stats) {
+        long now = System.currentTimeMillis();
+        if (now - lastEmitMs < 1000) return;
+        lastEmitMs = now;
+        JSONObject o = new JSONObject();
+        try {
+            o.put("phase", "walking");
+            o.put("scanned", stats[0]);
+            o.put("added", stats[1]);
+            o.put("updated", stats[2]);
+            o.put("currentPath", relPath);
+            o.put("heartbeat", true);
+        } catch (Exception ignored) {}
+        emitProgress(activeRootUri, o);
     }
 
     private JSONObject buildSong(Uri tree, Uri fileUri, String relPath, String name, String mime,
@@ -360,7 +382,16 @@ public class FolderEngine extends SQLiteOpenHelper {
         MediaMetadataRetriever mmr = new MediaMetadataRetriever();
         JSONObject song = new JSONObject();
         try {
-            mmr.setDataSource(activity, fileUri);
+            ParcelFileDescriptor pfd = activity.getContentResolver().openFileDescriptor(fileUri, "r");
+            if (pfd != null) {
+                try {
+                    mmr.setDataSource(pfd.getFileDescriptor());
+                } finally {
+                    pfd.close();
+                }
+            } else {
+                mmr.setDataSource(activity, fileUri);
+            }
             String title = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
             String artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
             String album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);

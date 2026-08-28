@@ -2395,6 +2395,135 @@ html.reduce-motion #player-artwork-img { animation: none !important; }
   border-radius: 50%;
 }
 
+
+/* =========================================================================
+   P0 FIX — route-scoped living atmosphere + lyrics layering + perf cuts
+   ========================================================================= */
+
+/* The player paints its OWN wall from the SAME live art (setAmbientArt keeps
+   both copies in lockstep) so nothing behind it can ghost through. */
+.player-ambient-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.player-ambient-layer .ambient-img {
+  position: absolute;
+  inset: -10%;
+  width: 120%;
+  height: 120%;
+  object-fit: cover;
+  filter: blur(var(--ambient-blur)) saturate(1.12);
+  transform: scale(1.1);
+  opacity: 0;
+  transition: opacity var(--dur-ambient) ease;
+  will-change: opacity;
+}
+.player-ambient-layer .ambient-img.front { opacity: 1; }
+.player-ambient-layer .ambient-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(5, 5, 6, 0.40) 0%, rgba(5, 5, 6, 0.55) 62%, rgba(5, 5, 6, 0.80) 100%);
+  transition: background-color 0.6s var(--ease-out);
+}
+.player-ambient-layer .ambient-tint {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim-tint);
+  opacity: 0.45;
+  transition: background-color 0.6s var(--ease-out);
+}
+.player-ambient-layer .ambient-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 18%, transparent 42%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+/* Layer order inside the player route: atmosphere(0) → glow/scrim(1) → stage(2) → deck(3) → header(4) */
+.full-player-header-bar { z-index: 4; }
+.player-center-stage { z-index: 2; }
+.player-bottom-deck {
+  position: relative;
+  z-index: 3;
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+#full-player-screen::after {
+  height: 38%;
+  background: linear-gradient(180deg, transparent 0%, rgba(5, 5, 6, 0.28) 55%, rgba(5, 5, 6, 0.62) 100%);
+}
+
+/* Lyrics: same atmosphere, soft scrim keeps ≥4.5:1 on bright art, no flat color */
+#stage-lyrics-view::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(5, 5, 6, 0.26) 0%, rgba(5, 5, 6, 0.08) 38%, rgba(5, 5, 6, 0.60) 100%);
+}
+.lyrics-scroll-stream {
+  position: relative;
+  z-index: 1;
+  padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+}
+
+/* PERF: the big scroll container no longer re-blurs every frame (main lag source).
+   The art is already blurred by the ambient img; scrim keeps rows readable. */
+#library-scroll-container {
+  background: rgba(8, 9, 11, 0.68);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* Full-screen tint: plain alpha (mix-blend-mode forced extra compositing on mobile) */
+.ambient-tint {
+  mix-blend-mode: normal;
+  opacity: 0.5;
+}
+
+/* Player chrome perf: slimmer blur on the deck glass */
+.player-ambient-glow { opacity: 0.45; }
+
+/* Polish: long metadata cannot break the rows */
+.player-audio-tech-chip {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Now-playing row: accent edge + tiny EQ bars (paused = static, reduce-motion kills) */
+.song-catalog-row.playing-now {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 58%);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.np-eq {
+  display: inline-flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 12px;
+  margin-right: 8px;
+  pointer-events: none;
+}
+.np-eq i {
+  width: 3px;
+  height: 40%;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: npEqBounce 1s ease-in-out infinite;
+}
+.np-eq i:nth-child(2) { animation-delay: 0.18s; }
+.np-eq i:nth-child(3) { animation-delay: 0.36s; }
+@keyframes npEqBounce {
+  0%, 100% { height: 30%; }
+  50% { height: 100%; }
+}
+html:not(.is-breathing) .np-eq i { animation: none; height: 42%; }
+html.reduce-motion .np-eq i { animation: none !important; height: 42% !important; }
+
 </style>
 </head>
 <body>
@@ -2591,6 +2720,15 @@ html.reduce-motion #player-artwork-img { animation: none !important; }
        ======================================================================= -->
   <section id="full-player-screen">
     
+    <!-- Route atmosphere: SAME living art blur, scoped to the player (no frozen clones) -->
+    <div class="player-ambient-layer" id="player-ambient-layer" aria-hidden="true">
+      <img class="ambient-img" id="pamb-img-a" alt="">
+      <img class="ambient-img" id="pamb-img-b" alt="">
+      <div class="ambient-scrim"></div>
+      <div class="ambient-tint"></div>
+      <div class="ambient-vignette"></div>
+    </div>
+
     <!-- Ambient Artwork Reflection Background -->
     <div class="player-ambient-glow" id="player-ambient-glow"></div>
 
@@ -2625,7 +2763,7 @@ html.reduce-motion #player-artwork-img { animation: none !important; }
       <!-- Stage 2: Synced Lyrics View -->
       <div id="stage-lyrics-view">
         <div class="lyrics-scroll-stream" id="player-lyrics-scroll-stream" onscroll="handleUserLyricScroll()">
-          <div class="lyric-stream-line" style="color: var(--text-tertiary);">No lyrics available for this track</div>
+          <div class="lyric-stream-line" style="color: var(--text-tertiary);">No lyrics for this track</div>
         </div>
         <button class="btn-resume-autofollow" id="btn-lyric-resume" onclick="resumeLyricAutoFollow()">
           <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
@@ -3433,6 +3571,7 @@ window.addEventListener("DOMContentLoaded", () => {
   if (state.songs[state.currentIndex]) setAmbientArt(state.songs[state.currentIndex].artwork || "artwork/default.png", true);
   initFolderSystem();
   attachCoverGestures();
+  armArtFallback();
 
   setInterval(syncPlaybackPosition, 100);
 
@@ -4325,7 +4464,7 @@ function extractCoverPalette(song) {
     return;
   }
   const img = new Image();
-  img.crossOrigin = "anonymous";
+  if (/^https?:/i.test(song.artwork || "")) img.crossOrigin = "anonymous";
   img.src = song.artwork;
   img.onload = () => {
     try {
@@ -4456,7 +4595,7 @@ function parseLrcText(lrc) {
   const container = document.getElementById("player-lyrics-scroll-stream");
 
   if (!lrc) {
-    container.innerHTML = `<div class="lyric-stream-line" style="color: var(--text-tertiary); margin-top: 40px;">No synchronized lyrics available for this track</div>`;
+    container.innerHTML = `<div class="lyric-stream-line" style="color: var(--text-tertiary); margin-top: 40px;">No lyrics for this track</div>`;
     return;
   }
 
@@ -5696,12 +5835,20 @@ function ambientImages() {
   return [ambient.a, ambient.b];
 }
 
+function pambientImages() {
+  return [document.getElementById("pamb-img-a"), document.getElementById("pamb-img-b")];
+}
+
 function setAmbientArt(url, instant) {
-  const imgs = ambientImages();
-  if (!imgs[0] || !imgs[1]) return;
+  if (!url) url = "artwork/default.png";
+  // One atmosphere: the app wall + the player route wall swap together, never frozen
+  [ambientImages(), pambientImages()].forEach(pair => swapAmbientPair(pair, url, instant));
+}
+
+function swapAmbientPair(imgs, url, instant) {
+  if (!imgs || !imgs[0] || !imgs[1]) return;
   const next = imgs[1 - ambient.front];
   const cur = imgs[ambient.front];
-  if (!url) url = "artwork/default.png";
   const apply = () => {
     next.classList.add("front");
     cur.classList.remove("front");
@@ -5709,7 +5856,7 @@ function setAmbientArt(url, instant) {
   };
   if (instant) { next.onload = null; next.onerror = null; next.src = url; apply(); return; }
   next.onload = apply;
-  next.onerror = () => { next.onerror = null; apply(); };
+  next.onerror = () => { next.onerror = null; next.src = "artwork/default.png"; };
   next.src = url;
 }
 
@@ -5953,6 +6100,17 @@ function persistFolderRoots() {
   if (!window.indexedDB) return;
   folderDbPut("roots", folderState.roots).catch(() => {});
 }
+let folderMergeTimer = null;
+function folderMergeSchedule() {
+  if (folderMergeTimer) return;
+  folderMergeTimer = setTimeout(() => { folderMergeTimer = null; persistFolderSongs(); folderApplyToLibrary(); }, 900);
+}
+function folderMergeNow() {
+  if (folderMergeTimer) { clearTimeout(folderMergeTimer); folderMergeTimer = null; }
+  persistFolderSongs();
+  folderApplyToLibrary();
+}
+
 function persistFolderSongs() {
   if (!window.indexedDB) return;
   const all = folderSongs();
@@ -6059,9 +6217,8 @@ window.onFolderScanProgress = function(p) {
     const root = folderRootByUri(uri);
     if (root) { root.lastScan = Date.now(); root.accessLost = false; }
     persistFolderRoots();
-    if (changed || (p.removedCount || 0) > 0) persistFolderSongs();
+    if (changed || (p.removedCount || 0) > 0) folderMergeNow(); else folderApplyToLibrary();
     hideScanBanner(uri);
-    folderApplyToLibrary();
     if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
     renderLibraryTab();
     if (p.error) {
@@ -6070,7 +6227,7 @@ window.onFolderScanProgress = function(p) {
       displayToast(`Library updated — ${folderSongCount(uri)} tracks`);
     }
   } else {
-    if (changed) { persistFolderSongs(); folderApplyToLibrary(); }
+    if (changed) folderMergeSchedule();
   }
   updateScanBanner(uri, st);
 };
@@ -6595,6 +6752,18 @@ function folderFullRescanAll() {
 
 /* --------------------------------------------------- cover gestures (NP) */
 
+function armArtFallback() {
+  if (window.__armArtFallback) return;
+  window.__armArtFallback = true;
+  document.addEventListener("error", e => {
+    const t = e.target;
+    if (t && t.tagName === "IMG" && !t.dataset.fb && t.src && !t.src.endsWith("artwork/default.png")) {
+      t.dataset.fb = "1";
+      t.src = "artwork/default.png";
+    }
+  }, true);
+}
+
 function attachCoverGestures() {
   const box = document.querySelector(".artwork-frame-box");
   if (!box || box.dataset.gestures) return;
@@ -6663,16 +6832,11 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
           <path d="M28 60 Q18 48, 28 36" stroke="rgba(0,229,255,0.12)" stroke-width="2" stroke-linecap="round" fill="none"/>
         </svg>
         <div class="empty-state-headline">${emptyMsg || "Your library is empty"}</div>
-        <div class="empty-state-sub">Import audio files or scan your device to start listening</div>
+        <div class="empty-state-sub">Pick a folder with your albums — everything inside is scanned and kept when you reopen the app</div>
         <div class="empty-state-ctas">
-          <button class="btn-import-header" onclick="invokeAudioImport()">
-            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Import Files
-          </button>
-          <button class="btn-import-header" style="background: var(--accent-soft); border-color: var(--border-active);" onclick="invokeDeviceScan()">
-            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            Scan Device
-          </button>
+          <button class="btn-primary-tap" onclick="addMusicFolder()">Add music folder</button>
+          <button class="btn-import-header" onclick="invokeAudioImport()">Import files</button>
+          <button class="btn-import-header" onclick="invokeDeviceScan()">Scan device audio</button>
         </div>
       </div>
     `;
@@ -6729,6 +6893,13 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
       const idx = state.songs.findIndex(x => x.id === s.id);
       if (idx !== -1) loadTrack(idx, true);
     };
+    if (state.songs[state.currentIndex] && s.id === state.songs[state.currentIndex].id) {
+      const eq = document.createElement("span");
+      eq.className = "np-eq";
+      eq.setAttribute("aria-hidden", "true");
+      eq.innerHTML = "<i></i><i></i><i></i>";
+      row.querySelector(".row-duration-digits")?.before(eq);
+    }
 
     listEl.appendChild(row);
   });
