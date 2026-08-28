@@ -310,3 +310,12 @@ Responded to the reported self-scrolling and overheating symptoms:
 - The list recycler no longer uses height-changing spacer nodes that can interact badly with WebView scroll anchoring. It uses a fixed-height list and translated visible-window container.
 - Decorative idle animation loops are disabled. No extra RAF progress loop remains.
 - Verification focus is now render stability/idle work first; no new feature/motion claims without real rendered proof.
+
+## v1.42 stability follow-up
+
+Focused only on the reported self-scroll/heat issue:
+- No new features or animations.
+- Removed the persistent idle playback interval and any extra RAF progress loop.
+- Added a render guard so repeated Library renders with the same data do not rebuild the recycler.
+- Overrode decorative infinite CSS loops for this stability build.
+- Confirmed in harness: zero idle intervals, zero idle RAF callbacks, stable scrollTop after repeated scroll events, and Android playback timer starts/stops only with play/pause.

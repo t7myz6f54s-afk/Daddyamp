@@ -3245,8 +3245,13 @@ html.transparent-bg .song-catalog-row { text-shadow: 0 1px 2px rgba(0,0,0,0.55);
 .song-row-simple .row-artwork-frame { width: 42px; height: 42px; margin-right: 12px; border-radius: 8px; display: block; }
 .song-row-simple .row-artwork-frame::before { display: none !important; animation: none !important; }
 .song-row-simple .row-artwork-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
-/* Stability/heat guard: no decorative infinite loops on idle/list screens. */
+/* v1.42 idle heat guard: no decorative infinite loops or hidden RAF/timer churn. */
 .empty-state-illustration { animation: none !important; }
+html.is-breathing:not(.rms-breath) #player-artwork-img,
+html.is-breathing.rms-breath #player-artwork-img,
+.is-breathing .mini-wave-cluster i,
+.np-eq i,
+.eq-live-bar { animation: none !important; }
 .player-ambient-layer { animation: none !important; }
 .row-artwork-frame::before, .mini-cover-shell::before, .album-thumb-container::before, .drilldown-art-box::before { animation: none !important; }
 
@@ -4460,7 +4465,8 @@ window.addEventListener("DOMContentLoaded", () => {
   updateSubnavIndicator();
   updateStagePillIndicator();
 
-  setInterval(syncPlaybackPosition, 250);
+  // Android playback sync is armed only while audio is playing.
+  // No permanent 250ms idle wake-up on the library screen.
 
   if (!isAndroid) {
     audioEl.addEventListener("timeupdate", () => {
@@ -5199,6 +5205,7 @@ function updatePlayButtonVisuals(playing) {
   });
   document.documentElement.classList.toggle("is-breathing", !!playing && !state.settings.reduceMotion);
   stopSmoothMiniProgress();
+  if (playing) startPlaybackSyncTimer(); else stopPlaybackSyncTimer();
   updateMiniDeckMeta();
   if (typeof updateActivePlayingRowInDOM === "function") updateActivePlayingRowInDOM();
 }
@@ -5502,6 +5509,16 @@ function handleTrackFinished() {
   } else {
     executePlayNext();
   }
+}
+
+let playbackSyncTimer = null;
+function startPlaybackSyncTimer() {
+  if (!isAndroid || playbackSyncTimer) return;
+  playbackSyncTimer = setInterval(syncPlaybackPosition, 250);
+}
+function stopPlaybackSyncTimer() {
+  if (playbackSyncTimer) clearInterval(playbackSyncTimer);
+  playbackSyncTimer = null;
 }
 
 function syncPlaybackPosition() {
@@ -7052,7 +7069,12 @@ function renderLibraryTab() {
   const tab = state.currentTab;
 
   if (tab === "tracks") {
-    renderSongsCatalog(applyCurrentSortCached(libraryTracks()));
+    const tracks = applyCurrentSortCached(libraryTracks());
+    if (simpleVirtualCtx && simpleVirtualCtx.tracks === tracks && document.getElementById("library-render-target")?.querySelector(".simple-virtual-list")) {
+      updateSimpleVirtualRows(true);
+      return;
+    }
+    renderSongsCatalog(tracks);
   } else if (tab === "albums") {
     renderAlbumCards();
   } else if (tab === "artists") {

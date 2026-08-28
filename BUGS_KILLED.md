@@ -373,3 +373,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Kept true Android transparent-window support and dim setting from v1.40.
 - JSDOM stability proof with 10,000 tracks: 25 visible rows mounted initially, 25 after deep scroll; album art present; no duration/trailing/format nodes; scrollTop stayed exactly 5800 after 25 repeated scroll events; first visible row changed to Song 94; idle RAF delta over 500ms was 0; transparency bridge still fired; 0 JS errors.
 - Rebuilt signed APK as versionCode 42 / versionName 1.41.
+
+## v1.42 — idle loop removal + recycler stabilization follow-up
+
+- Removed the always-on Android playback sync interval. The 250ms MediaPlayer position timer now starts only while Android audio is actually playing and is cleared again on pause/error/stop, so the idle Library screen has no permanent interval wake-up.
+- Kept album covers restored in the minimal main list: cover + title + artist only.
+- Added a same-data render guard for the main Songs recycler so redundant `renderLibraryTab()` calls do not tear down/rebuild the list or reset the visible window when the track array reference has not changed.
+- Disabled remaining decorative infinite loops that could keep GPU/CPU active during normal use: cover breathing, mini meter bounce, EQ row bounce, skeleton shimmer, ambient drift, and empty-state spin are overridden off for the stability build.
+- Main recycler remains absolute/fixed-height to avoid WebView scroll anchoring. No spacer height mutation while scrolling.
+- JSDOM profiling proof: idle intervals before/after 500ms = 0/0, idle RAF delta = 0, 25 rows mounted before and after deep scroll, album art present, duration/trailing controls absent, scrollTop stayed 5800 after 30 scroll events, playing starts one interval, pause clears it back to 0, no JS errors.
+- Rebuilt signed APK as versionCode 43 / versionName 1.42.
