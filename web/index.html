@@ -736,8 +736,8 @@ body, html {
 }
 
 .mini-master-play-btn {
-  width: 38px;
-  height: 38px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   background: var(--accent);
   color: #060709;
@@ -746,7 +746,8 @@ body, html {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.1s;
+  transition: transform var(--dur-micro) var(--ease-out);
+  flex-shrink: 0;
 }
 
 .mini-master-play-btn:active {
@@ -1241,8 +1242,8 @@ body, html {
 }
 
 .play-pause-huge-btn {
-  width: 58px;
-  height: 58px;
+  width: 68px;
+  height: 68px; /* now-playing play = 1.35x the 50px mini play */
   border-radius: 50%;
   background: var(--accent);
   color: #060709;
@@ -2051,8 +2052,8 @@ body, html { background: var(--void); }
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 .artwork-frame-box {
-  max-width: min(340px, 80vw);
-  border-radius: 18px;
+  max-width: min(60vw, 400px);
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
 }
@@ -2180,7 +2181,7 @@ html.reduce-motion #full-player-screen { transition-duration: 0.001s !important;
 /* Accent crossfade: palette retint is 600ms on the accent-driven surfaces */
 .nav-bottom-tab.active, .mini-master-play-btn, .play-pause-huge-btn,
 #mini-progress-line, .btn-import-header, .subnav-tab-item,
-.stage-pill-btn, .folder-scan-banner, .lyric-stream-line.active-sync,
+.stage-pill-btn, .lyric-stream-line.active-sync,
 .search-result-row, .folder-root-card, .drilldown-header-card {
   transition: color 0.6s var(--ease-out), background-color 0.6s var(--ease-out),
               border-color 0.6s var(--ease-out), box-shadow 0.6s var(--ease-out);
@@ -2195,43 +2196,8 @@ html.reduce-motion #full-player-screen { transition-duration: 0.001s !important;
   mix-blend-mode: multiply;
 }
 
-/* Scan progress pill */
-#folder-scan-banner {
-  position: fixed;
-  top: calc(var(--header-h) + 8px);
-  left: 50%;
-  transform: translate(-50%, -8px);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  border-radius: 999px;
-  background: rgba(18, 18, 22, 0.88);
-  backdrop-filter: blur(20px) saturate(1.3);
-  -webkit-backdrop-filter: blur(20px) saturate(1.3);
-  border: 1px solid var(--hairline);
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 600;
-  z-index: 120;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
-}
-#folder-scan-banner.visible {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-#folder-scan-banner svg {
-  color: var(--accent);
-  animation: scanSpin 1.6s linear infinite;
-}
-@keyframes scanSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-html.reduce-motion #folder-scan-banner svg { animation: none; }
+/* Virtualized catalog sentinel */
+.catalog-sentinel { height: 1px; }
 
 /* Folder root cards + rows */
 .folder-root-card {
@@ -2529,12 +2495,6 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
 <body>
 
 <div id="daddyamp-root">
-  <!-- Folder scan progress pill -->
-  <div id="folder-scan-banner" aria-live="polite">
-    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.2-8.56"/><polyline points="21 3 21 8 16 8"/><line x1="12" y1="8" x2="12" y2="13"/></svg>
-    <span id="folder-scan-label">Reading&hellip;</span>
-  </div>
-
   <!-- LIVING WALLPAPER: blurred album art behind everything -->
   <div id="ambient-layer" aria-hidden="true">
     <img class="ambient-img" id="ambient-img-a" alt="">
@@ -3580,6 +3540,7 @@ window.addEventListener("DOMContentLoaded", () => {
   if (state.songs[state.currentIndex]) setAmbientArt(state.songs[state.currentIndex].artwork || "artwork/default.png", true);
   initFolderSystem();
   attachCoverGestures();
+  attachCatalogLoadMore();
   armArtFallback();
 
   setInterval(syncPlaybackPosition, 100);
@@ -3905,10 +3866,17 @@ function commitSeek() {
    AUDIO PLAYBACK PIPELINE (O(1) STATE UPDATES & DYNAMIC SPECS)
    ========================================================================= */
 
-function loadTrack(index, autoPlay = true) {
+let playGen = 0;
+
+function loadTrack(index, autoPlay = true, preSeekMs = null) {
   if (index < 0 || index >= state.songs.length) return;
+  const song = ensureTrackId(state.songs[index]);
+  if (!song) return;
   state.currentIndex = index;
-  const song = state.songs[index];
+  const gen = ++playGen;
+  state.playGen = gen;
+  state.pendingSeekGen = gen; // this load owns any pending seek until applied
+  if (window.__playlog) window.__playlog.push({ uri: String(song.path || song.url || song.id), idx: index, t: Date.now() });
 
   document.getElementById("mini-meta-title").textContent = song.title;
   const miniArtistLine = document.getElementById("mini-meta-artist");
@@ -3979,8 +3947,7 @@ function loadTrack(index, autoPlay = true) {
   state.duration = song.duration || 30;
   state.currentTime = 0;
   state.crossfadeTriggered = false;
-  state.audioErrorSkips = 0;
-  state.pendingSeekMs = song.cueOf ? (song.cueOf.start * 1000) : null;
+  state.pendingSeekMs = (preSeekMs != null) ? preSeekMs : (song.cueOf ? (song.cueOf.start * 1000) : null);
   setAmbientArt(song.artwork || "artwork/default.png");
   retriggerAnim(document.getElementById("player-artwork-img"), "art-enter");
   retriggerAnim(document.getElementById("player-song-title"), "text-enter");
@@ -4099,7 +4066,7 @@ function executePlayNext() {
 
   if (state.queue.length > 0) {
     const nextSong = state.queue.shift();
-    const idx = state.songs.findIndex(s => s.id === nextSong.id);
+    const idx = nextSong ? resolveSongIndex(nextSong) : -1;
     if (idx !== -1) {
       loadTrack(idx, true);
       renderInPlayerQueue();
@@ -4115,7 +4082,7 @@ function executePlayNext() {
     if (fill.length > 0) {
       state.queue = fill;
       const fillSong = state.queue.shift();
-      const fillIdx = state.songs.findIndex(s => s.id === fillSong.id);
+      const fillIdx = fillSong ? resolveSongIndex(fillSong) : -1;
       if (fillIdx !== -1) {
         loadTrack(fillIdx, true);
         renderInPlayerQueue();
@@ -4482,10 +4449,12 @@ function extractCoverPalette(song) {
     return;
   }
   const img = new Image();
+  const gen = state.playGen;
   if (/^https?:/i.test(song.artwork || "")) img.crossOrigin = "anonymous";
-  img.onerror = () => { applyDefaultAccent(); };
+  img.onerror = () => { if (gen === state.playGen) applyDefaultAccent(); };
   img.src = song.artwork;
   img.onload = () => {
+    if (gen !== state.playGen) return; // a later tap owns the palette now
     try {
       const c = document.createElement("canvas");
       c.width = 30; c.height = 30;
@@ -4693,9 +4662,11 @@ function resumeLyricAutoFollow() {
 
 function queryLrclib(song) {
   const q = encodeURIComponent(`${song.artist} ${song.title}`);
+  const gen = state.playGen;
   fetch(`https://lrclib.net/api/search?q=${q}`)
     .then(r => r.json())
     .then(d => {
+      if (gen !== state.playGen) return; // user moved on — do not swap lyrics
       if (Array.isArray(d) && d.length > 0) {
         const lyr = d[0].syncedLyrics || d[0].plainLyrics || "";
         song.lyrics = lyr;
@@ -4933,7 +4904,7 @@ function maybeTriggerCrossfade() {
     target = state.songs[nIdx];
   }
   if (!target) return;
-  const tidx = state.songs.findIndex(sd => sd.id === target.id);
+  const tidx = target ? resolveSongIndex(target) : -1;
   if (tidx === -1) return;
 
   const audioPath = target.path.startsWith("http") || target.path.startsWith("content://") || target.path.startsWith("file://")
@@ -5054,9 +5025,14 @@ function renderInPlayerQueue() {
     `;
 
     row.onclick = () => {
-      state.queue.splice(idx, 1);
-      const songIdx = state.songs.findIndex(s => s.id === item.id);
-      if (songIdx !== -1) loadTrack(songIdx, true);
+      if (!item) return;
+      // Play by identity FIRST; only then remove it from "up next".
+      // (splice-then-play used to mutate the queue under the user's tap.)
+      const songIdx = resolveSongIndex(item);
+      if (songIdx === -1) return;
+      loadTrack(songIdx, true);
+      if (item.id == null) ensureTrackId(item);
+      state.queue = state.queue.filter(q => q !== item && !(q && q.id != null && item.id != null && q.id === item.id));
     };
 
     container.appendChild(row);
@@ -5542,7 +5518,7 @@ function renderPlaylistDetail(plId) {
       </div>
     `;
     row.onclick = () => {
-      const idx = state.songs.findIndex(x => x.id === sd.id);
+      const idx = resolveSongIndex(sd);
       if (idx !== -1) loadTrack(idx, true);
       state.queue = songs.slice(i + 1);
     };
@@ -5582,7 +5558,7 @@ function playPlaylist(plId, shuffle) {
     }
   }
   state.queue = playList.slice(1);
-  const idx = state.songs.findIndex(sd => sd.id === playList[0].id);
+  const idx = playList[0] ? resolveSongIndex(playList[0]) : -1;
   if (idx !== -1) loadTrack(idx, true);
   const plName = (state.playlists.find(pp => pp.id === plId) || {}).name || "";
   displayToast(`Playing playlist: ${plName}`);
@@ -5794,7 +5770,7 @@ function renderStatsHtml() {
 }
 
 function playHistoryEntry(songId) {
-  const idx = state.songs.findIndex(sd => sd.id === songId);
+  const idx = resolveSongByID(songId);
   if (idx !== -1) loadTrack(idx, true);
   dismissAllSheets();
 }
@@ -6089,7 +6065,11 @@ const folderState = {
 };
 
 function folderRootByUri(uri) { return folderState.roots.find(r => r.uri === uri); }
-function folderSongs() { return Array.from(folderState.tracks.values()); }
+function folderSongs() {
+  const out = [];
+  folderState.tracks.forEach(t => { ensureTrackId(t); out.push(t); });
+  return out;
+}
 function folderSongCount(uri) {
   if (!uri) return folderState.tracks.size;
   let n = 0;
@@ -6131,8 +6111,56 @@ function folderTrackId(url) {
   return 700000 + ((h >>> 0) % 100000);
 }
 
+function ensureTrackId(t) {
+  if (!t) return t;
+  if (t.id == null || t.id === "") {
+    t.id = (t.url || t.path) ? folderTrackId(t.url || t.path) : (Date.now() + Math.floor(Math.random() * 1e6));
+  }
+  return t;
+}
+
+// THE identity contract: a row's SONG OBJECT is the only thing it may load.
+function resolveSongIndex(t) {
+  if (!t) return -1;
+  if (t.id != null && t.id !== "") {
+    const i = state.songs.findIndex(x => x && x.id != null && x.id === t.id);
+    if (i !== -1) return i;
+  }
+  if (t.url) {
+    const i = state.songs.findIndex(x => x && x.url === t.url);
+    if (i !== -1) return i;
+  }
+  if (t.path) {
+    const i = state.songs.findIndex(x => x && x.path === t.path);
+    if (i !== -1) return i;
+  }
+  return state.songs.indexOf(t);
+}
+
+function resolveSongByID(id) {
+  if (id == null || id === "") return -1;
+  const i = state.songs.findIndex(x => x && x.id != null && x.id === id);
+  if (i !== -1) return i;
+  return state.songs.findIndex(x => x && x.url === String(id));
+}
+
+function currentSongUri(t) {
+  return t ? String(t.path || t.url || "") : "";
+}
+
+// After ANY rebuild/reorder of state.songs: move currentIndex to the SAME
+// track by its canonical uri. Never lets a reorder silently re-point
+// currentIndex at another song (the "wrong song after scan" hallucination).
+function remapCurrentIndex(prevUri) {
+  if (!prevUri) return;
+  const i = state.songs.findIndex(x => x && currentSongUri(x) === prevUri);
+  if (i !== -1 && i !== state.currentIndex) state.currentIndex = i;
+}
+
 function folderApplyToLibrary() {
+  const prevUri = currentSongUri(state.songs[state.currentIndex]);
   state.songs = state.songs.filter(s => s.source !== "folder").concat(folderSongs());
+  remapCurrentIndex(prevUri);
   if (typeof refreshBadges === "function") refreshBadges();
 }
 
@@ -6220,7 +6248,6 @@ window.onFolderRootPicked = function(meta) {
   }
   persistFolderRoots();
   startFolderScan(meta.uri, true);
-  displayToast(`Scanning “${root.name}”…`);
   selectLibraryTab("folders");
 };
 
@@ -6228,7 +6255,8 @@ function startFolderScan(rootUri, full) {
   const root = folderRootByUri(rootUri);
   if (!root || !isAndroid || !window.AndroidBridge.scanFolder) return;
   folderState.scanning.set(rootUri, { running: true, scanned: 0, added: 0, updated: 0, removed: 0, currentPath: "", done: false });
-  showScanBanner(rootUri);
+  if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
+  if (typeof renderLibraryTab === "function" && state.currentTab === "folders") renderLibraryTab();
   const ignoreMs = state.settings.folderIgnoreShort === false ? 0 : 10000;
   try { window.AndroidBridge.scanFolder(rootUri, !!full, ignoreMs); } catch (e) {}
 }
@@ -6246,7 +6274,7 @@ window.onFolderScanProgress = function(p) {
   let changed = false;
   batch.forEach(s => {
     if (!s || !s.url) return;
-    if (s.id == null) s.id = folderTrackId(s.url);
+    ensureTrackId(s);
     folderState.tracks.set(s.url, s);
     changed = true;
   });
@@ -6259,18 +6287,16 @@ window.onFolderScanProgress = function(p) {
     if (root) { root.lastScan = Date.now(); root.accessLost = false; }
     persistFolderRoots();
     if (changed || (p.removedCount || 0) > 0) folderMergeNow(); else folderApplyToLibrary();
-    hideScanBanner(uri);
     if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
-    renderLibraryTab();
+    if (state.currentTab === "folders") renderLibraryTab();
     if (p.error) {
       displayToast(`Folder scan error: ${p.error}`);
-    } else {
+    } else if ((p.added || 0) > 0 || (p.removedCount || 0) > 0) {
       displayToast(`Library updated — ${folderSongCount(uri)} tracks`);
     }
   } else {
     if (changed) folderMergeSchedule();
   }
-  updateScanBanner(uri, st);
 };
 
 function setFolderEnabled(uri, on) {
@@ -6339,6 +6365,7 @@ function saveSession(force) {
       repeat: state.repeatMode,
       shuffle: state.shuffle,
       volume: state.volume,
+      playing: state.isPlaying,
       ts: now
     }));
   } catch (e) {}
@@ -6355,9 +6382,9 @@ function restoreSession() {
   }
   state.shuffle = !!s.shuffle;
   state.repeatMode = typeof s.repeat === "number" ? s.repeat : 0;
-  state.pendingSeekMs = Math.max(0, Math.floor((s.time || 0) * 1000));
-  loadTrack(idx, false);
-  displayToast(`Resumed — ${state.songs[idx].title}`);
+  const autoPlay = s.playing === true && state.songs[idx] && state.songs[idx].path === s.path;
+  loadTrack(idx, autoPlay, s.time ? Math.max(0, Math.floor(s.time * 1000)) : null);
+  if (!autoPlay) displayToast(`Restored — ${state.songs[idx].title}`);
 }
 
 /* -------------------------------------------------------------- haptics */
@@ -6370,31 +6397,11 @@ function haptic(kind) {
   } catch (e) {}
 }
 
-/* ------------------------------------------------------- scan banner UI */
+/* ------------------------------------------------------- scan status (inline only) */
 
-function showScanBanner(rootUri) {
-  const el = document.getElementById("folder-scan-banner");
-  if (!el) return;
-  el.classList.add("visible");
-  el.dataset.rootUri = rootUri || "";
-  updateScanBanner(rootUri, folderState.scanning.get(rootUri));
-}
-function updateScanBanner(rootUri, st) {
-  const el = document.getElementById("folder-scan-banner");
-  if (!el) return;
-  const root = folderRootByUri(rootUri);
-  const label = document.getElementById("folder-scan-label");
-  if (label && root) {
-    label.textContent = st && st.done ? `Reading “${root.name}”… done` : `Reading “${root.name}”… ${(st && st.scanned || 0).toLocaleString()} tracks`;
-  }
-}
-function hideScanBanner(rootUri) {
-  const el = document.getElementById("folder-scan-banner");
-  if (!el) return;
-  if (!rootUri || el.dataset.rootUri === rootUri) {
-    const still = Array.from(folderState.scanning.values()).some(s => s.running);
-    if (!still) el.classList.remove("visible");
-  }
+function folderScanStatus(uri) {
+  const st = folderState.scanning.get(uri);
+  return (st && st.running) ? { scanned: st.scanned || 0 } : null;
 }
 
 /* ============================================================ UI: settings */
@@ -6415,6 +6422,10 @@ function renderMusicFoldersSettings() {
   folderState.roots.forEach((root, i) => {
     const count = folderSongCount(root.uri);
     const when = root.lastScan ? new Date(root.lastScan).toLocaleDateString() : "never";
+    const scanning = folderScanStatus(root.uri);
+    const statusLine = scanning
+      ? `<span style="color: var(--accent);">Scanning… ${scanning.scanned.toLocaleString()} tracks</span>`
+      : `${count} tracks • scanned ${when}`;
     const toggleId = `folder-root-toggle-${i}`;
     html += `<div class="folder-root-settings-row">
       <label class="toggle-switch-unit" style="flex-shrink: 0;">
@@ -6423,7 +6434,7 @@ function renderMusicFoldersSettings() {
       </label>
       <div style="flex: 1; min-width: 0;">
         <div style="font-weight: 650; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(root.name)}</div>
-        <div style="font-size: 11px; color: var(--text-tertiary);">${count} tracks • scanned ${when}</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">${statusLine}</div>
       </div>
       <button class="btn-import-header" style="height: 28px; padding: 0 8px; font-size: 10.5px;" onclick="startFolderScan('${escJs(root.uri)}', false)">Rescan</button>
       <button class="btn-import-header" style="height: 28px; padding: 0 8px; font-size: 10.5px; color: #FF5A5A;" onclick="confirmRemoveFolder('${escJs(root.uri)}')">Remove</button>
@@ -6493,11 +6504,12 @@ function renderFolderRootsBrowser() {
       : `<div style="width: 48px; height: 48px; border-radius: 12px; background: var(--surface-2); display:flex; align-items:center; justify-content:center; color: var(--text-tertiary-38);"><svg class="icon icon-md" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>`;
     const subCount = tree.children.length;
     const when = root.lastScan ? new Date(root.lastScan).toLocaleDateString() : "never scanned";
+    const cardScan = folderScanStatus(root.uri);
     html += `<div class="folder-root-card" onclick="openFolderScope('${escJs(root.uri)}', '')" oncontextmenu="openFolderScopeMenu('${escJs(root.uri)}',''); event.preventDefault();">
       <div class="folder-root-mosaic">${mosaic}</div>
       <div style="flex: 1; min-width: 0;">
         <div style="font-weight: 650; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(root.name)}</div>
-        <div style="font-size: 11px; color: var(--text-tertiary);">${flat.length} tracks ${subCount ? `• ${subCount} folders` : ""} • ${when}</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">${cardScan ? `Scanning… ${cardScan.scanned.toLocaleString()} tracks` : `${flat.length} tracks ${subCount ? `• ${subCount} folders` : ""} • ${when}`}</div>
         ${root.accessLost ? `<div style="font-size: 10.5px; color: #FFB84D; font-weight: 650; margin-top: 2px;">⚠ Access lost — tap to restore</div>` : ""}
       </div>
       <svg class="icon icon-sm" style="color: var(--text-tertiary-38);" viewBox="0 0 24 24" onclick="event.stopPropagation(); openFolderScopeMenu('${escJs(root.uri)}', '')"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
@@ -6846,7 +6858,7 @@ function playFolderTracks(folderPath, shuffle) {
     }
   }
   state.queue = [...playList];   // queue holds song objects (matches executePlayNext)
-  const idx = state.songs.findIndex(s => s.id === playList[0].id);
+  const idx = playList[0] ? resolveSongIndex(playList[0]) : -1;
   if (idx !== -1) loadTrack(idx, true);
   displayToast(`Playing folder: ${dirBaseName(folderPath)}`);
 }
@@ -6884,66 +6896,136 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
 
   const listEl = document.createElement("div");
   listEl.className = "song-rows-catalog";
-
-  // Track row index for staggered animation
-  let rowIndex = 0;
-
-  tracks.forEach(s => {
-    const isPlayingThis = state.songs[state.currentIndex]?.id === s.id;
-    const row = document.createElement("div");
-    row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
-    row.dataset.songId = s.id;
-    row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
-    rowIndex++;
-    const ext = (s.path || "").split(".").pop().toUpperCase();
-    const formatLabel = s.virtual ? "CUE" : ((ext === "WAV" || ext === "FLAC" || ext === "MP3" || ext === "M4A") ? ext : "AUDIO");
-
-    row.innerHTML = `
-      <div class="row-artwork-frame">
-        <img src="${s.artwork || 'artwork/default.png'}" class="row-artwork-img" alt="${s.title}">
-        <div class="row-live-eq-badge">
-          <div class="eq-live-bar"></div>
-          <div class="eq-live-bar"></div>
-          <div class="eq-live-bar"></div>
-        </div>
-      </div>
-      <div class="row-meta-content">
-        <div class="row-title-line">${s.title}</div>
-        <div class="row-details-line">
-          <span class="tech-format-badge">${formatLabel}</span>
-          <span>${s.artist}</span>
-          <span>•</span>
-          <span>${s.album}</span>
-          ${(s.play_count || 0) >= 3 ? `<span class="plays-count-chip"><svg class="icon icon-xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>${s.play_count} plays</span>` : ""}
-        </div>
-      </div>
-      <div class="row-trailing-group">
-        <span class="row-duration-digits">${formatDuration(s.duration)}</span>
-        <button class="btn-inline-heart ${s.favorite ? 'liked' : ''}" onclick="event.stopPropagation(); toggleRowFavorite(${s.id})">
-          <svg class="icon icon-md" viewBox="0 0 24 24">${s.favorite ? '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/>' : '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>'}</svg>
-        </button>
-        <button class="btn-action-tap" onclick="event.stopPropagation(); triggerTrackMenu(state.songs.find(x => x.id === ${s.id}))">
-          <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-        </button>
-      </div>
-    `;
-
-    row.onclick = () => {
-      const idx = state.songs.findIndex(x => x.id === s.id);
-      if (idx !== -1) loadTrack(idx, true);
-    };
-    if (state.songs[state.currentIndex] && s.id === state.songs[state.currentIndex].id) {
-      const eq = document.createElement("span");
-      eq.className = "np-eq";
-      eq.setAttribute("aria-hidden", "true");
-      eq.innerHTML = "<i></i><i></i><i></i>";
-      row.querySelector(".row-duration-digits")?.before(eq);
-    }
-
-    listEl.appendChild(row);
-  });
-
+  catalogCtx = { tracks, listEl, offset: 0 };
+  buildCatalogRows(0, Math.min(tracks.length, CATALOG_CHUNK));
+  if (tracks.length > CATALOG_CHUNK) appendCatalogSentinel(listEl);
+  syncCatalogObserver();
   target.appendChild(listEl);
+}
+
+// ---- Virtualized catalog: only ~80 rows mounted; the rest stream in on scroll.
+const CATALOG_CHUNK = 80;
+let catalogCtx = null;
+let catalogIO = null;
+
+function buildSongRow(s, rowIndex) {
+  const isPlayingThis = state.songs[state.currentIndex]?.id === s.id && state.songs[state.currentIndex]?.id != null;
+  const row = document.createElement("div");
+  row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
+  row.dataset.songId = s.id;
+  row.dataset.path = s.path || s.url || "";
+  row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
+  const ext = (s.path || "").split(".").pop().toUpperCase();
+  const formatLabel = s.virtual ? "CUE" : ((ext === "WAV" || ext === "FLAC" || ext === "MP3" || ext === "M4A") ? ext : "AUDIO");
+
+  row.innerHTML = `
+    <div class="row-artwork-frame">
+      <img src="${s.artwork || 'artwork/default.png'}" class="row-artwork-img" alt="${s.title}" loading="lazy" decoding="async">
+      <div class="row-live-eq-badge">
+        <div class="eq-live-bar"></div>
+        <div class="eq-live-bar"></div>
+        <div class="eq-live-bar"></div>
+      </div>
+    </div>
+    <div class="row-meta-content">
+      <div class="row-title-line">${s.title}</div>
+      <div class="row-details-line">
+        <span class="tech-format-badge">${formatLabel}</span>
+        <span>${s.artist}</span>
+        <span>•</span>
+        <span>${s.album}</span>
+        ${(s.play_count || 0) >= 3 ? `<span class="plays-count-chip"><svg class="icon icon-xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>${s.play_count} plays</span>` : ""}
+      </div>
+    </div>
+    <div class="row-trailing-group">
+      <span class="row-duration-digits">${formatDuration(s.duration)}</span>
+      <button class="btn-inline-heart ${s.favorite ? 'liked' : ''}" onclick="event.stopPropagation(); toggleRowFavorite(${s.id})">
+        <svg class="icon icon-md" viewBox="0 0 24 24">${s.favorite ? '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/>' : '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>'}</svg>
+      </button>
+      <button class="btn-action-tap" onclick="event.stopPropagation(); triggerTrackMenu(state.songs.find(x => x && x.id != null && x.id === ${s.id}))">
+        <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </button>
+    </div>
+  `;
+
+  row.onclick = () => {
+    state.queue = []; // a direct tap resets "up next" — no rogue advances
+    const idx = resolveSongIndex(s);
+    if (idx !== -1) {
+      loadTrack(idx, true);
+    }
+  };
+  if (state.songs[state.currentIndex] && s.id != null && s.id === state.songs[state.currentIndex].id) {
+    const eq = document.createElement("span");
+    eq.className = "np-eq";
+    eq.setAttribute("aria-hidden", "true");
+    eq.innerHTML = "<i></i><i></i><i></i>";
+    row.querySelector(".row-duration-digits")?.before(eq);
+  }
+  return row;
+}
+
+function buildCatalogRows(from, to) {
+  const ctx = catalogCtx;
+  if (!ctx) return;
+  to = Math.min(to, ctx.tracks.length);
+  for (let i = from; i < to; i++) ctx.listEl.appendChild(buildSongRow(ctx.tracks[i], i));
+  ctx.offset = Math.max(ctx.offset, to);
+}
+
+function appendCatalogSentinel(listEl) {
+  let sent = listEl.querySelector(".catalog-sentinel");
+  if (!sent) {
+    sent = document.createElement("div");
+    sent.className = "catalog-sentinel";
+    sent.setAttribute("aria-hidden", "true");
+    listEl.appendChild(sent);
+  } else {
+    listEl.appendChild(sent); // keep it last
+  }
+}
+
+function loadMoreCatalogRows() {
+  const ctx = catalogCtx;
+  if (!ctx || ctx.offset >= ctx.tracks.length) return 0;
+  const from = ctx.offset;
+  const to = Math.min(from + CATALOG_CHUNK, ctx.tracks.length);
+  buildCatalogRows(from, to);
+  updateActivePlayingRowInDOM();
+  if (ctx.offset >= ctx.tracks.length) {
+    const sent = ctx.listEl.querySelector(".catalog-sentinel");
+    if (sent) sent.remove();
+  } else {
+    appendCatalogSentinel(ctx.listEl);
+  }
+  syncCatalogObserver();
+  return to - from;
+}
+
+function syncCatalogObserver() {
+  if (!catalogIO) return;
+  catalogIO.disconnect();
+  const sent = document.querySelector(".catalog-sentinel");
+  if (sent) catalogIO.observe(sent);
+}
+
+function attachCatalogLoadMore() {
+  if (window.__catalogIOAttached) return;
+  window.__catalogIOAttached = true;
+  if (window.IntersectionObserver) {
+    catalogIO = new IntersectionObserver(entries => {
+      entries.forEach(en => { if (en.isIntersecting) loadMoreCatalogRows(); });
+    }, { root: document.getElementById("library-scroll-container"), rootMargin: "600px 0px" });
+    syncCatalogObserver();
+  } else {
+    const sc = document.getElementById("library-scroll-container");
+    if (sc) sc.addEventListener("scroll", () => {
+      const sent = document.querySelector(".catalog-sentinel");
+      if (!sent) return;
+      const r = sent.getBoundingClientRect();
+      if (r.top < (window.innerHeight || 800) * 1.5) loadMoreCatalogRows();
+    }, { passive: true });
+  }
 }
 
 function renderAlbumCards() {
@@ -7032,7 +7114,7 @@ function renderAlbumDetailView(albumName, list) {
     `;
 
     row.onclick = () => {
-      const i = state.songs.findIndex(x => x.id === s.id);
+      const i = resolveSongIndex(s);
       if (i !== -1) loadTrack(i, true);
     };
 
@@ -7050,7 +7132,7 @@ function playAlbumTracks(albumName, shuffle = false) {
     state.queue.sort(() => Math.random() - 0.5);
   }
   const firstSong = state.queue.shift();
-  const idx = state.songs.findIndex(s => s.id === firstSong.id);
+  const idx = firstSong ? resolveSongIndex(firstSong) : -1;
   if (idx !== -1) loadTrack(idx, true);
   refreshBadges();
   displayToast(`Playing album: ${albumName}`);
@@ -7124,7 +7206,7 @@ function playArtistTracks(artistName) {
   if (artistSongs.length === 0) return;
   state.queue = [...artistSongs];
   const firstSong = state.queue.shift();
-  const idx = state.songs.findIndex(s => s.id === firstSong.id);
+  const idx = firstSong ? resolveSongIndex(firstSong) : -1;
   if (idx !== -1) loadTrack(idx, true);
   refreshBadges();
   displayToast(`Playing artist: ${artistName}`);
@@ -7185,15 +7267,17 @@ function invokeAudioImport() {
 window.onAudioFilesImported = function(importedJson) {
   if (!importedJson) return;
   const newSongs = Array.isArray(importedJson) ? importedJson : JSON.parse(importedJson);
+  const prevUri = currentSongUri(state.songs[state.currentIndex]);
   newSongs.forEach(s => {
+    ensureTrackId(s);
     s.imported = true;
     state.songs.unshift(s);
   });
+  remapCurrentIndex(prevUri);
   persistState();
   refreshBadges();
   renderLibraryTab();
   displayToast(`Imported ${newSongs.length} tracks successfully`);
-  if (newSongs.length > 0) loadTrack(0, true);
 };
 
 function receiveHtmlFiles(fileList) {
@@ -7217,8 +7301,7 @@ function receiveHtmlFiles(fileList) {
     tmp.src = objectUrl;
     tmp.onloadedmetadata = () => {
       const duration = Math.floor(tmp.duration) || 180;
-      state.songs.unshift({
-        id: Date.now() + Math.floor(Math.random() * 10000),
+      const rec = {
         title,
         artist,
         album,
@@ -7231,7 +7314,11 @@ function receiveHtmlFiles(fileList) {
         play_count: 0,
         lyrics: "",
         imported: true
-      });
+      };
+      ensureTrackId(rec);
+      const prevUri = currentSongUri(state.songs[state.currentIndex]);
+      state.songs.unshift(rec);
+      remapCurrentIndex(prevUri);
 
       count++;
       if (count === files.length) {
@@ -7239,7 +7326,6 @@ function receiveHtmlFiles(fileList) {
         refreshBadges();
         renderLibraryTab();
         displayToast(`Imported ${files.length} audio files`);
-        loadTrack(0, true);
       }
     };
   });
@@ -7256,9 +7342,10 @@ function invokeDeviceScan() {
     const scanned = JSON.parse(jsonStr);
     if (scanned && scanned.length > 0) {
       const merged = [];
+      const prevUri = currentSongUri(state.songs[state.currentIndex]);
       scanned.forEach((ds) => {
         merged.push({
-          id: ds.id || (Date.now() + Math.floor(Math.random() * 10000)),
+          id: ds.id || folderTrackId(ds.path || ds.filePath || (Date.now() + Math.floor(Math.random() * 10000))),
           title: ds.title,
           artist: ds.artist,
           album: ds.album,
@@ -7279,6 +7366,7 @@ function invokeDeviceScan() {
         });
       });
       state.songs = merged;
+      remapCurrentIndex(prevUri);
       loadCueSheets();
       persistState();
       refreshBadges();
@@ -7453,7 +7541,7 @@ function renderQueueList() {
     `;
     row.onclick = () => {
       state.queue.splice(idx, 1);
-      const songIdx = state.songs.findIndex(s => s.id === item.id);
+      const songIdx = resolveSongIndex(item);
       if (songIdx !== -1) loadTrack(songIdx, true);
       dismissAllSheets();
     };
@@ -7480,7 +7568,7 @@ function emptyQueueList() {
 function actionPlayNowSelected() {
   const s = state.targetContextSong;
   if (s) {
-    const idx = state.songs.findIndex(x => x.id === s.id);
+    const idx = resolveSongIndex(s);
     if (idx !== -1) loadTrack(idx, true);
   }
   dismissAllSheets();
@@ -7517,7 +7605,7 @@ function actionToggleLikedSelected() {
 function actionShowLyricsSelected() {
   const s = state.targetContextSong;
   if (s) {
-    const idx = state.songs.findIndex(x => x.id === s.id);
+    const idx = resolveSongIndex(s);
     if (idx !== -1) loadTrack(idx, state.isPlaying);
     expandNowPlayingScreen();
     switchPlayerStage("lyrics");
@@ -7903,10 +7991,11 @@ window.onAudioPrepared = function(durMs) {
     updateTimerDisplays();
     drawPowerampScrubber(true);
   }
-  if (state.pendingSeekMs != null && window.AndroidBridge.seekAudio) {
+  if (state.pendingSeekMs != null && state.pendingSeekGen === state.playGen && window.AndroidBridge.seekAudio) {
     window.AndroidBridge.seekAudio(state.pendingSeekMs);
     state.currentTime = state.pendingSeekMs / 1000;
     state.pendingSeekMs = null;
+    state.pendingSeekGen = null;
   }
 };
 
@@ -7917,17 +8006,12 @@ window.onAudioFinished = function() {
 };
 
 window.onAudioError = function(code) {
+  // Honest: never change tracks without the user's tap. (Auto-skip here was the
+  // "tap A → B plays" hallucination.)
   state.isPlaying = false;
   updatePlayButtonVisuals(false);
-  displayToast("This file can't be played — skipping");
-  const cur = state.currentIndex;
-  const next = (cur + 1) % Math.max(1, state.songs.length);
-  state.audioErrorSkips = (state.audioErrorSkips || 0) + 1;
-  if (next !== cur && state.audioErrorSkips <= 2) {
-    loadTrack(next, true);
-    return;
-  }
-  state.audioErrorSkips = 0;
+  const cur = state.songs[state.currentIndex];
+  displayToast(cur ? `Can't play “${cur.title}”` : "This file can't be played");
 };
 
 window.onAudioBecomingNoisy = function() {

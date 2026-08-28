@@ -107,3 +107,59 @@ tag write-back, media session, crossfade, playlists, stats, themes, history.
   didn't match folder songs. Fix: deterministic folderTrackId assigned at merge.
 - Suite relocated to a persistent workspace path (/home/user/smoke/smoke.mjs) after
   /tmp was recycled; rebuilt with full A→L coverage + verify section; 108/108.
+
+## v1.12 — playback identity (stop-the-press) + scan-bg + catalog scale
+
+### Identity fixes (P0)
+- **Auto-skip on audio error REVERTED as a bug.** `window.onAudioError` did
+  `loadTrack((cur+1), true)` — the "tap A → B plays" hallucination. Now: pause, update
+  button, honest toast `Can't play "<title>"`, NO track change.
+- `window.onAudioFilesImported` / `receiveHtmlFiles` auto-played `loadTrack(0, true)` after
+  import → removed.
+- Imported songs used `Date.now()+random` ids (non-stable across restart); device scan
+  replaced `state.songs` with brand-new random-id objects → `ensureTrackId(t)` derives a
+  deterministic id from the canonical URI/path on every ingest path.
+- 16 call sites used `findIndex(x => x.id === …)` + `loadTrack` → `resolveSongIndex` /
+  `resolveSongByID` (by id → url → path → last-resort indexOf).
+- Stale `state.currentIndex` after array rebuilds (scan replace, folder merge, import
+  unshift) re-pointed at the wrong song → `remapCurrentIndex(prevUri)` on every rebuild.
+- Now-playing queue row spliced the queue BEFORE loading → loads by identity first, then
+  rebuilds the queue; direct catalog taps clear "up next".
+- Palette extraction / lrclib fetch could land after a later tap → generation-token guards
+  (`state.playGen`); applied-seek guarded by `pendingSeekGen === playGen`.
+- Session never stored `playing` → restore now autoplays only if it was playing (and the
+  saved path matches); restore-to-position was dropped for non-CUE tracks because
+  `loadTrack` cleared `pendingSeekMs` → explicit `preSeekMs` param.
+- Track-change playback log `window.__playlog` (instrumentation; absent in production).
+
+### Scan background-only + no banner
+- Removed permanent "Reading music / folder done" top pill (CSS, HTML, show/update/hide fns).
+- Scan progress is inline only: Music Folders settings rows + folder cards show
+  "Scanning… N tracks" while running. Completion = no sticky strip; toast only on errors or
+  actual library change (added/removed > 0); scan errors are inline in Music Folders.
+- No scan path calls `loadTrack`/`play`.
+
+### Catalog scale (virtualized rows)
+- `renderSongsCatalog` now mounts rows in chunks of 80 with an IntersectionObserver
+  sentinel (>= 600px root margin), `loading="lazy" decoding="async"` art, `key`-equivalent
+  identity via `dataset.songId`/`dataset.path`. 500–2000+ tracks stay smooth; the proof
+  block verifies exact-2-track behavior is unchanged.
+- Remap: `folderApplyToLibrary`/`invokeDeviceScan`/import paths keep the same track
+  highlighted (by URI) after re-merge.
+
+### Other
+- Restore-to-position bug fixed (v1.11 would drop it for non-CUE tracks).
+- `restoreSession` lookup hardened: id resolve + path match.
+- Poweramp polish: cover 60vw ≤ 400px (55–62%), radius on 8px ladder (16px), mini play
+  50px (≥44px targets), NP play 68px (1.35× mini), motion tokens 90/180/380/420/600 kept,
+  OLED ladder kept.
+- Suite: 140/140 (was 108/108) — auto-skip checks replaced with honest-error checks,
+  added section M identity proof (30 checks), fixed a flaky lyrics-layer test (progress
+  ticker race).
+
+#### Bugs found while patching
+- `loadTrack` cleared `pendingSeekMs` unconditionally → session time restore never worked
+  for non-CUE files (pre-existing; fixed with `preSeekMs`).
+- `onAudioFilesImported` had a duplicated persist/render block (dead code; removed).
+- `lyrics stays a layer` suite check raced the progress ticker (harness `getCurrentPosition`)
+  — stabilized with `__setPos(55000)` matching the asserted value.

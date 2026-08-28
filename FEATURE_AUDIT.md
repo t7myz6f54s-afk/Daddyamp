@@ -98,3 +98,32 @@ PASS, N/A (never claimed in the UI — nothing fake to remove), or explicitly no
    blank; (c) visibilitychange now stops capture in background, resumes on return;
    (d) reduce-motion disables the viz entirely. Suite: watchdog, background,
    resume, and reduce-motion checks all pass.
+
+## v1.12 audit — playback identity P0 + scan background-only + catalog scale
+
+**Status: shipped 2026-08-28.** Suite 140/140 (×4 runs).
+
+### Honest playback contract (locked)
+- **Auto-skip on audio error is now a BUG.** `onAudioError` = pause + honest toast +
+  `Can't play "<title>"`. No track change. (This reverted the v1.11 "fix".)
+- Track change requires an explicit user tap (or whitelisted control): row tap, mini play,
+  notification, next/prev, same-id restore. Nothing else may call play.
+- `window.__playlog` (when present) records every `loadTrack` — `{uri, idx, t}`.
+  Identity: `id = folderTrackId(path||url)` so ids survive restarts and re-scans.
+
+### Scale (virtualization) verdict
+- Catalog rows: chunks of 80 + IntersectionObserver sentinel, lazy art. 2-track and
+  100-track suites pass; spot-load at 2000 rows measured smooth in jsdom DOM terms
+  (browser check on device still recommended).
+- Queue identity: taps load by id then rebuild queue; direct taps clear "up next".
+- Scan scheduling: chunked native scan unchanged (locked contract), merge throttled ~900 ms,
+  `folderApplyToLibrary` remaps current track by URI.
+
+### Poweramp UI polish (locked expectations from the brief)
+- Cover 60vw (55–62%) ≤ 400px, radius 16 (8px ladder), mini play 50px, NP play 68px (1.35×),
+  44px min targets, motion tokens 90/180/380/420/600, OLED ladder, no top scan chrome,
+  no fake controls, tempo/held states untouched.
+
+### What was deliberately NOT changed (lock)
+Folder model, native scanner, audio engine (single MediaPlayer), lyrics atmosphere layers,
+waveseek gestures, 4-tab nav, mini-player-above-nav layout, schema.
