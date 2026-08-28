@@ -589,3 +589,10 @@ Build order note: the prompt's snippet order (assets → web) is reversed in pra
 - Lock screen/notification: native MediaSession now receives full metadata (title/artist/album/
   albumArtist/genre/year/duration) plus artwork for all schemes — content:// album art and
   https:// downloads (background thread, 4s connect/6s read timeouts, 1024px cap).
+
+
+## v1.9 — Combined agent prompt executed (see COMBINED_AGENT_PROMPT.md)
+Poweramp Music Folders (SAF roots, persistable permissions, IndexedDB catalog, chunked
+incremental scans, tree browser, restart-safe session), Living Now Playing (multi-color
+palette + 600ms crossfade, breath, haptics, cover gestures, mini hairline), nav =
+Library/EQ/Search/Menu, global search sheet, cyan accent. 119/119 smoke checks.

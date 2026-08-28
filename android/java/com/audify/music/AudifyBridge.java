@@ -28,6 +28,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Base64;
@@ -83,12 +86,14 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
 
     private BroadcastReceiver noisyReceiver;
     private boolean isReceiverRegistered = false;
+    private FolderEngine folderEngine;
     private Object audioFocusRequestObject; // API 26+
 
     public AudifyBridge(Activity activity, WebView webView) {
         this.activity = activity;
         this.webView = webView;
         this.audioManager = (AudioManager) activity.getSystemService(Context.AUDIO_SERVICE);
+        this.folderEngine = new FolderEngine(activity, webView);
         setupNoisyReceiver();
         setupMediaSession();
     }
@@ -1019,6 +1024,9 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 Bitmap bmp = BitmapFactory.decodeStream(is);
                 is.close();
                 return bmp;
+            } else if (artworkPath.startsWith("file://")) {
+                // Folder-scan art cache (app cache dir)
+                return BitmapFactory.decodeFile(artworkPath.substring("file://".length()));
             }
         } catch (Exception ignored) {}
         return null;
@@ -1238,6 +1246,124 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     @JavascriptInterface
     public String scanDeviceMusic() {
         return scanDeviceMusic(true);
+    }
+
+    /* ======================================================================
+       POWERAMP MUSIC FOLDERS (SAF tree picker + persistent library roots)
+       ====================================================================== */
+
+    @JavascriptInterface
+    public void pickFolderTree() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+            intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+            activity.startActivityForResult(intent, MainActivity.FOLDER_TREE_REQUEST);
+        } catch (Exception e) {
+            Log.e(TAG, "pickFolderTree failed: " + e.getMessage());
+        }
+    }
+
+    /** Called from MainActivity after the system folder picker returns. */
+    public void handleFolderPicked(Uri folderUri) {
+        if (folderUri == null) return;
+        try {
+            activity.getContentResolver().takePersistableUriPermission(
+                    folderUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception e) {
+            Log.w(TAG, "Persistable grant failed: " + e.getMessage());
+        }
+        String name = queryRootName(folderUri);
+        String uriStr = folderUri.toString();
+        folderEngine.addRoot(uriStr, name);
+        JSONObject o = new JSONObject();
+        try {
+            o.put("uri", uriStr);
+            o.put("name", name);
+        } catch (Exception ignored) {}
+        runOnJs("if (typeof window.onFolderRootPicked === 'function') { window.onFolderRootPicked(" + o.toString() + "); }");
+    }
+
+    private String queryRootName(Uri uri) {
+        try {
+            Cursor c = activity.getContentResolver().query(uri, null, null, null, null);
+            if (c != null) {
+                try {
+                    int i = c.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    if (i >= 0 && c.moveToFirst()) return c.getString(i);
+                } finally { c.close(); }
+            }
+        } catch (Exception ignored) {}
+        String seg = uri.getLastPathSegment();
+        if (seg != null) return seg.replace("primary:", "");
+        return "Music";
+    }
+
+    @JavascriptInterface
+    public String getFolderRoots() {
+        if (folderEngine == null) return "[]";
+        return folderEngine.getRoots(true).toString();
+    }
+
+    @JavascriptInterface
+    public boolean isFolderScanning(String rootUri) {
+        return folderEngine != null && folderEngine.isScanning(rootUri);
+    }
+
+    @JavascriptInterface
+    public void scanFolder(String rootUri, boolean full, long ignoreShortMs) {
+        if (folderEngine == null) return;
+        if (!full && !rootUriAvailable(rootUri)) return; // JS shows the restore CTA
+        folderEngine.scan(rootUri, full, ignoreShortMs);
+    }
+
+    private boolean rootUriAvailable(String rootUri) {
+        try {
+            Uri tree = Uri.parse(rootUri);
+            Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree,
+                    DocumentsContract.getTreeDocumentId(tree));
+            Cursor c = activity.getContentResolver().query(children,
+                    new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID}, null, null, null);
+            if (c != null) c.close();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @JavascriptInterface
+    public int removeFolder(String rootUri) {
+        int n = folderEngine != null ? folderEngine.removeRoot(rootUri) : 0;
+        try {
+            activity.getContentResolver().releasePersistableUriPermission(
+                    Uri.parse(rootUri), Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception ignored) {}
+        return n;
+    }
+
+    @JavascriptInterface
+    public void setFolderEnabled(String rootUri, boolean enabled) {
+        if (folderEngine != null) folderEngine.setEnabled(rootUri, enabled);
+    }
+
+    @JavascriptInterface
+    public long getFolderLastScan(String rootUri) {
+        return folderEngine != null ? folderEngine.lastScan(rootUri) : 0;
+    }
+
+    @JavascriptInterface
+    public void vibrate(long milliseconds) {
+        try {
+            Vibrator v = (Vibrator) activity.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v == null || !v.hasVibrator()) return;
+            if (Build.VERSION.SDK_INT >= 26) {
+                v.vibrate(VibrationEffect.createOneShot(milliseconds, VibrationEffect.DEFAULT_AMPLITUDE));
+            } else {
+                v.vibrate(milliseconds);
+            }
+        } catch (Exception ignored) {}
     }
 
     private void runOnJs(final String jsCode) {

@@ -19,6 +19,7 @@ public class MainActivity extends Activity {
 
     public static final int FILE_CHOOSER_REQUEST = 2001;
     public static final int AUDIO_PICKER_REQUEST = 2002;
+    public static final int FOLDER_TREE_REQUEST = 2003;
 
     private WebView webView;
     private AudifyBridge bridge;
@@ -65,6 +66,37 @@ public class MainActivity extends Activity {
         webView.setBackgroundColor(Color.parseColor("#08090D"));
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
+                new android.app.AlertDialog.Builder(view.getContext())
+                        .setMessage(message)
+                        .setPositiveButton("Yes", new android.content.DialogInterface.OnClickListener() {
+                            public void onClick(android.content.DialogInterface d, int w) { result.confirm(); }
+                        })
+                        .setNegativeButton("Cancel", new android.content.DialogInterface.OnClickListener() {
+                            public void onClick(android.content.DialogInterface d, int w) { result.cancel(); }
+                        })
+                        .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                            public void onCancel(android.content.DialogInterface d) { result.cancel(); }
+                        })
+                        .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {
+                new android.app.AlertDialog.Builder(view.getContext())
+                        .setMessage(message)
+                        .setPositiveButton("OK", new android.content.DialogInterface.OnClickListener() {
+                            public void onClick(android.content.DialogInterface d, int w) { result.confirm(); }
+                        })
+                        .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                            public void onCancel(android.content.DialogInterface d) { result.cancel(); }
+                        })
+                        .show();
+                return true;
+            }
+
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
                 if (filePathCallback != null) {
@@ -120,6 +152,10 @@ public class MainActivity extends Activity {
         } else if (requestCode == AUDIO_PICKER_REQUEST) {
             if (resultCode == Activity.RESULT_OK && data != null && bridge != null) {
                 bridge.handleAudioPickerResult(data);
+            }
+        } else if (requestCode == FOLDER_TREE_REQUEST) {
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null && bridge != null) {
+                bridge.handleFolderPicked(data.getData());
             }
         }
     }

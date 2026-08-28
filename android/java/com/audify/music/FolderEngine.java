@@ -1,0 +1,484 @@
+package com.audify.music;
+
+import android.app.Activity;
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.content.Context;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteOpenHelper;
+import android.media.MediaMetadataRetriever;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.DocumentsContract;
+import android.provider.OpenableColumns;
+import android.util.Log;
+import android.webkit.WebView;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.security.MessageDigest;
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * Poweramp-style Music Folders engine.
+ *
+ * The user grants one or more directory trees (SAF ACTION_OPEN_DOCUMENT_TREE with
+ * persistable read permission). This engine recursively walks each tree, extracts
+ * tags + embedded artwork, and keeps an incremental scan-state database so rescanning
+ * only picks up new/changed/deleted files. The web layer owns the visible catalog
+ * (IndexedDB); this engine owns the ground truth of "what is on disk + what changed",
+ * plus durable roots and OS-level permission grants.
+ */
+public class FolderEngine extends SQLiteOpenHelper {
+
+    private static final String TAG = "DaddyAmpFolders";
+    private static final long IGNORE_SHORT_DEFAULT_MS = 10_000L;
+    private static final String[] AUDIO_EXT = {"mp3","m4a","aac","flac","ogg","opus","wav","wma","ape","aiff","aif","mp4","mka","dsf"};
+
+    private final Activity activity;
+    private final WebView webView;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Set<String> scanning = new HashSet<>();
+
+    public FolderEngine(Activity activity, WebView webView) {
+        super(activity, "daddyamp_folders.db", null, 1);
+        this.activity = activity;
+        this.webView = webView;
+    }
+
+    @Override
+    public void onCreate(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE roots (uri TEXT PRIMARY KEY, name TEXT, enabled INTEGER DEFAULT 1, last_scan INTEGER DEFAULT 0)");
+        db.execSQL("CREATE TABLE files (uri TEXT PRIMARY KEY, root_uri TEXT, mtime INTEGER, size INTEGER)");
+        db.execSQL("CREATE INDEX idx_files_root ON files(root_uri)");
+    }
+
+    @Override
+    public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+    }
+
+    /* ---------------------------------------------------------------- roots */
+
+    /** Add (or re-enable) a root after the user picked it. */
+    public synchronized void addRoot(String treeUri, String name) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues cv = new ContentValues();
+        cv.put("uri", treeUri);
+        cv.put("name", name != null ? name : "Music");
+        cv.put("enabled", 1);
+        db.insertWithOnConflict("roots", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public synchronized JSONArray getRoots(boolean testAccess) {
+        JSONArray out = new JSONArray();
+        Cursor c = getReadableDatabase().query("roots", null, null, null, null, null, "name ASC");
+        if (c == null) return out;
+        try {
+            int u = c.getColumnIndexOrThrow("uri"), n = c.getColumnIndexOrThrow("name"),
+                e = c.getColumnIndexOrThrow("enabled"), l = c.getColumnIndexOrThrow("last_scan");
+            while (c.moveToNext()) {
+                try {
+                    String uri = c.getString(u);
+                    JSONObject o = new JSONObject();
+                    o.put("uri", uri);
+                    o.put("name", c.getString(n));
+                    o.put("enabled", c.getInt(e) == 1);
+                    o.put("lastScan", c.getLong(l));
+                    o.put("accessLost", testAccess && !canAccess(uri));
+                    out.put(o);
+                } catch (Exception ignored) {}
+            }
+        } finally {
+            c.close();
+        }
+        return out;
+    }
+
+    /** True if the persisted tree permission still resolves to a readable directory. */
+    private boolean canAccess(String treeUri) {
+        try {
+            Uri tree = Uri.parse(treeUri);
+            Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree,
+                    DocumentsContract.getTreeDocumentId(tree));
+            ContentResolver cr = activity.getContentResolver();
+            Cursor c = cr.query(children, new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID},
+                    null, null, null);
+            if (c != null) {
+                boolean ok = c.moveToFirst() || true; // empty dir is still accessible
+                c.close();
+                return ok;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public synchronized void setEnabled(String treeUri, boolean enabled) {
+        ContentValues cv = new ContentValues();
+        cv.put("enabled", enabled ? 1 : 0);
+        getWritableDatabase().update("roots", cv, "uri=?", new String[]{treeUri});
+    }
+
+    /** Un-index a root. Returns number of tracks removed; files on disk untouched. */
+    public synchronized int removeRoot(String treeUri) {
+        SQLiteDatabase db = getWritableDatabase();
+        int n = db.delete("files", "root_uri=?", new String[]{treeUri});
+        db.delete("roots", "uri=?", new String[]{treeUri});
+        return n;
+    }
+
+    public synchronized long lastScan(String treeUri) {
+        Cursor c = getReadableDatabase().query("roots", new String[]{"last_scan"},
+                "uri=?", new String[]{treeUri}, null, null, null);
+        if (c == null) return 0;
+        try {
+            return c.moveToFirst() ? c.getLong(0) : 0;
+        } finally {
+            c.close();
+        }
+    }
+
+    /* --------------------------------------------------------------- scanner */
+
+    public boolean isScanning(String treeUri) {
+        synchronized (scanning) {
+            return scanning.contains(treeUri);
+        }
+    }
+
+    /**
+     * Recursive scan. full=true re-reads everything; full=false is incremental on
+     * mtime/size. Emits chunked progress to window.onFolderScanProgress.
+     */
+    public void scan(final String treeUri, final boolean full, final long ignoreShortMs) {
+        synchronized (scanning) {
+            if (scanning.contains(treeUri)) return;
+            scanning.add(treeUri);
+        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    scanSync(treeUri, full, ignoreShortMs > 0 ? ignoreShortMs : IGNORE_SHORT_DEFAULT_MS);
+                } catch (Throwable t) {
+                    Log.e(TAG, "scan failed", t);
+                    emitProgress(treeUri, doneObj(t.getMessage()));
+                } finally {
+                    synchronized (scanning) { scanning.remove(treeUri); }
+                }
+            }
+        }, "daddyamp-scan").start();
+    }
+
+    private JSONObject doneObj(String err) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("phase", "done");
+            if (err != null) o.put("error", err);
+        } catch (Exception ignored) {}
+        return o;
+    }
+
+    private void scanSync(String treeUri, boolean full, long ignoreShortMs) throws Exception {
+        Uri tree = Uri.parse(treeUri);
+        String rootName = tree.getLastPathSegment() != null ? tree.getLastPathSegment() : "Root";
+        SQLiteDatabase db = getWritableDatabase();
+
+        // Known file index (uri -> "mtime|size")
+        final java.util.Map<String, String> known = new java.util.HashMap<>();
+        if (!full) {
+            Cursor c = db.query("files", new String[]{"uri", "mtime", "size"},
+                    "root_uri=?", new String[]{treeUri}, null, null, null);
+            if (c != null) {
+                try {
+                    while (c.moveToNext()) known.put(c.getString(0), c.getLong(1) + "|" + c.getLong(2));
+                } finally { c.close(); }
+            }
+        }
+
+        final Set<String> seen = new HashSet<>();
+        final java.util.Map<String, String> current = new java.util.HashMap<>(); // uri -> mtime|size
+        final Set<String> artThisRun = new HashSet<>();
+        final int[] stats = new int[]{0, 0, 0, 0};          // scanned, added, updated
+        final long[] durAcc = new long[]{0};
+        final JSONArray batch = new JSONArray();
+        final long startMs = System.currentTimeMillis();
+
+        activeRootUri = treeUri;
+        walk(tree, tree, "", known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs);
+
+        // Removed files: known but not seen this pass
+        JSONArray removed = new JSONArray();
+        for (String u : known.keySet()) {
+            if (!seen.contains(u)) removed.put(u);
+        }
+        for (int i = 0; i < removed.length(); i++) {
+            try { db.delete("files", "uri=?", new String[]{removed.getString(i)}); } catch (Exception ignored) {}
+        }
+
+        // Upsert fresh mtime/size for every current file (keeps incremental state accurate)
+        db.beginTransaction();
+        try {
+            for (java.util.Map.Entry<String, String> en : current.entrySet()) {
+                String[] parts = en.getValue().split("\\|");
+                ContentValues cv = new ContentValues();
+                cv.put("uri", en.getKey());
+                cv.put("root_uri", treeUri);
+                cv.put("mtime", parts.length > 0 ? Long.parseLong(parts[0]) : 0L);
+                cv.put("size", parts.length > 1 ? Long.parseLong(parts[1]) : 0L);
+                db.insertWithOnConflict("files", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+
+        ContentValues rootCv = new ContentValues();
+        rootCv.put("last_scan", System.currentTimeMillis());
+        db.update("roots", rootCv, "uri=?", new String[]{treeUri});
+
+        JSONObject done = new JSONObject();
+        try {
+            done.put("phase", "done");
+            done.put("rootUri", treeUri);
+            done.put("rootName", rootName);
+            done.put("scanned", stats[0]);
+            done.put("added", stats[1]);
+            done.put("updated", stats[2]);
+            done.put("removedCount", removed.length());
+            done.put("removedUris", removed);
+            done.put("elapsedMs", System.currentTimeMillis() - startMs);
+            if (batch.length() > 0) done.put("batch", batch);
+        } catch (Exception ignored) {}
+        emitProgress(treeUri, done);
+    }
+
+    private void walk(Uri tree, Uri dir, String relPath,
+                      java.util.Map<String, String> known, Set<String> seen,
+                      java.util.Map<String, String> current, Set<String> artThisRun,
+                      int[] stats, long[] durAcc, JSONArray batch, long ignoreShortMs) {
+        Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(tree,
+                DocumentsContract.getTreeDocumentId(dir));
+        Cursor c = null;
+        try {
+            c = activity.getContentResolver().query(childrenUri,
+                    new String[]{
+                            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                            DocumentsContract.Document.COLUMN_MIME_TYPE,
+                            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                            DocumentsContract.Document.COLUMN_SIZE,
+                            DocumentsContract.Document.COLUMN_FLAGS
+                    }, null, null, null);
+        } catch (Exception e) {
+            return;
+        }
+        if (c == null) return;
+        try {
+            while (c.moveToNext()) {
+                String docId = c.getString(0);
+                String name = c.getString(1);
+                String mime = c.getString(2);
+                long mtime = c.getLong(3);
+                long size = c.getLong(4);
+                long flags = c.getLong(5);
+                Uri childUri = DocumentsContract.buildDocumentUriUsingTree(tree, docId);
+
+                if (name == null) continue;
+                if (name.startsWith(".") || name.startsWith("._") || name.equals("Thumbs.db")) continue;
+
+                boolean isDir = DocumentsContract.Document.MIME_TYPE_DIR.equals(mime);
+                if (isDir) {
+                    walk(tree, childUri, relPath.isEmpty() ? name : relPath + "/" + name,
+                            known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs);
+                    continue;
+                }
+                if (!isAudio(mime, name)) continue;
+                if (size > 0 && size < 1024) continue;
+
+                String key = childUri.toString();
+                seen.add(key);
+                current.put(key, mtime + "|" + size);
+                stats[0]++;
+
+                String knownMeta = known.get(key);
+                if (knownMeta != null && knownMeta.equals(mtime + "|" + size)) {
+                    flushWalkBatch(batch, stats, relPath);
+                    continue; // unchanged
+                }
+                if (knownMeta != null) stats[2]++; else stats[1]++;
+
+                JSONObject song = buildSong(tree, childUri, relPath, name, mime, mtime, size,
+                        artThisRun, ignoreShortMs, durAcc);
+                if (song == null) continue;
+
+                if (durationIgnore(song, ignoreShortMs)) continue;
+
+                batch.put(song);
+                if (batch.length() >= 90) flushWalkBatch(batch, stats, relPath);
+            }
+        } finally {
+            c.close();
+        }
+    }
+
+    private boolean durationIgnore(JSONObject song, long ignoreShortMs) {
+        try {
+            return ignoreShortMs > 0 && song.optLong("duration", 0) > 0 &&
+                    song.optLong("duration", 0) * 1000 < ignoreShortMs;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private String activeRootUri = "";
+    private void flushWalkBatch(JSONArray batch, int[] stats, String relPath) {
+        if (batch.length() == 0) return;
+        JSONObject o = new JSONObject();
+        try {
+            o.put("phase", "walking");
+            o.put("scanned", stats[0]);
+            o.put("added", stats[1]);
+            o.put("updated", stats[2]);
+            o.put("currentPath", relPath);
+            o.put("batch", batch);
+        } catch (Exception ignored) {}
+        emitProgress(activeRootUri, o);
+        while (batch.length() > 0) batch.remove(0);
+    }
+
+    private JSONObject buildSong(Uri tree, Uri fileUri, String relPath, String name, String mime,
+                                 long mtime, long size, Set<String> artThisRun,
+                                 long ignoreShortMs, long[] durAcc) {
+        MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+        JSONObject song = new JSONObject();
+        try {
+            mmr.setDataSource(activity, fileUri);
+            String title = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
+            String artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+            String album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
+            String albumArtist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST);
+            String genre = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE);
+            String durS = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            String yearS = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR);
+            String mmrMime = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE);
+
+            long durMs = 0;
+            try { durMs = Long.parseLong(durS != null ? durS : "0"); } catch (Exception ignored) {}
+            if (durMs > 0) durAcc[0] += durMs;
+
+            String fallbackAlbum = relPath.isEmpty() ? name : relPath.replace('/', ' ');
+            song.put("title", title != null ? title : stripExt(name));
+            song.put("artist", (artist != null && !artist.equals("<unknown>")) ? artist : "Unknown Artist");
+            song.put("album", (album != null && !album.isEmpty()) ? album : fallbackAlbum);
+            song.put("albumArtist", (albumArtist != null && !albumArtist.equals("<unknown>")) ? albumArtist : "");
+            song.put("genre", genre != null && !genre.equals("<unknown>") && !genre.isEmpty() ? genre : "Folder Audio");
+            song.put("year", yearS != null ? parseIntSafe(yearS) : 0);
+            song.put("duration", durMs / 1000);
+            song.put("mimeType", mmrMime != null ? mmrMime : (mime != null ? mime : "audio/mpeg"));
+            song.put("size", size);
+            song.put("mtime", mtime);
+            song.put("url", fileUri.toString());
+            song.put("path", fileUri.toString());
+            song.put("filePath", "");
+            song.put("rootUri", tree.toString());
+            song.put("folderPath", relPath);
+            song.put("source", "folder");
+            song.put("docName", name);
+            song.put("favorite", 0);
+            song.put("play_count", 0);
+            song.put("lyrics", "");
+            song.put("imported", true);
+
+            String artUrl = extractArt(tree, fileUri, song, mmr, artThisRun);
+            song.put("artwork", artUrl);
+        } catch (Exception e) {
+            return null;
+        } finally {
+            try { mmr.release(); } catch (Exception ignored) {}
+        }
+        return song;
+    }
+
+    private String stripExt(String name) {
+        int i = name.lastIndexOf('.');
+        return i > 0 ? name.substring(0, i) : name;
+    }
+
+    private int parseIntSafe(String s) {
+        try {
+            int v = Integer.parseInt(s.trim());
+            return v > 0 && v < 3000 ? v : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /** Extract embedded artwork once per album key and cache it on disk. */
+    private String extractArt(Uri tree, Uri fileUri, JSONObject song, MediaMetadataRetriever mmr,
+                              Set<String> artThisRun) {
+        try {
+            String albumKey = song.optString("album", "") + "|" + song.optString("albumArtist", "")
+                    + "|" + song.optString("folderPath", "");
+            String key = sha1(tree.toString() + "|" + albumKey);
+            File dir = new File(activity.getCacheDir(), "art");
+            if (!dir.exists()) dir.mkdirs();
+            File out = new File(dir, key + ".jpg");
+
+            if (!out.exists() && !artThisRun.contains(key)) {
+                byte[] pic = mmr.getEmbeddedPicture();
+                artThisRun.add(key);
+                if (pic != null && pic.length > 512) {
+                    FileOutputStream fos = new FileOutputStream(out);
+                    fos.write(pic);
+                    fos.close();
+                }
+            }
+            if (out.exists() && out.length() > 512) {
+                return "file://" + out.getAbsolutePath();
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private static String sha1(String s) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-1");
+            byte[] d = md.digest(s.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return String.valueOf(s.hashCode());
+        }
+    }
+
+    private boolean isAudio(String mime, String name) {
+        if (mime != null && mime.startsWith("audio/")) return true;
+        int i = name.lastIndexOf('.');
+        if (i < 0) return false;
+        String ext = name.substring(i + 1).toLowerCase();
+        for (String e : AUDIO_EXT) if (e.equals(ext)) return true;
+        return false;
+    }
+
+    /* ------------------------------------------------------------- progress */
+
+    private void emitProgress(final String treeUri, final JSONObject obj) {
+        main.post(new Runnable() {
+            @Override
+            public void run() {
+                String js = "if (typeof window.onFolderScanProgress === 'function') { window.onFolderScanProgress("
+                        + obj.toString() + "); }";
+                webView.evaluateJavascript(js, null);
+            }
+        });
+    }
+}

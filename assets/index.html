@@ -2162,16 +2162,256 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 html.reduce-motion .song-catalog-row { animation: none !important; }
 html.reduce-motion #full-player-screen { transition-duration: 0.001s !important; }
 
+
+/* =========================================================================
+   MUSIC FOLDERS + LIVING NOW PLAYING — surfaces & motion
+   ========================================================================= */
+
+:root {
+  --accent: #7EC8E3;
+  --accent-soft: rgba(126, 200, 227, 0.14);
+  --accent-glow: rgba(126, 200, 227, 0.28);
+  --accent-ambient: rgba(126, 200, 227, 0.08);
+  --accent-2: #7EC8E3;
+  --scrim-tint: rgba(0, 0, 0, 0);
+  --breath-scale: 1;
+}
+
+/* Accent crossfade: palette retint is 600ms on the accent-driven surfaces */
+.nav-bottom-tab.active, .mini-master-play-btn, .play-pause-huge-btn,
+#mini-progress-line, .btn-import-header, .subnav-tab-item,
+.stage-pill-btn, .folder-scan-banner, .lyric-stream-line.active-sync,
+.search-result-row, .folder-root-card, .drilldown-header-card {
+  transition: color 0.6s var(--ease-out), background-color 0.6s var(--ease-out),
+              border-color 0.6s var(--ease-out), box-shadow 0.6s var(--ease-out);
+}
+
+/* Room tint from the cover (extra scrim on bright art, recolored per track) */
+.ambient-tint {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim-tint);
+  opacity: 0.85;
+  mix-blend-mode: multiply;
+}
+
+/* Scan progress pill */
+#folder-scan-banner {
+  position: fixed;
+  top: calc(var(--header-h) + 8px);
+  left: 50%;
+  transform: translate(-50%, -8px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: rgba(18, 18, 22, 0.88);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid var(--hairline);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 120;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s var(--ease-out), transform 0.35s var(--ease-out);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+}
+#folder-scan-banner.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+#folder-scan-banner svg {
+  color: var(--accent);
+  animation: scanSpin 1.6s linear infinite;
+}
+@keyframes scanSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+html.reduce-motion #folder-scan-banner svg { animation: none; }
+
+/* Folder root cards + rows */
+.folder-root-card {
+  margin: 8px 14px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 18px;
+  background: rgba(20, 20, 24, 0.72);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+}
+.folder-root-card:active { transform: scale(0.975); }
+.folder-root-mosaic {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+}
+.folder-root-mosaic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.folder-root-mosaic > div { grid-column: 1 / -1; }
+
+.folder-section-label {
+  padding: 16px 16px 2px 16px;
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 1.1px;
+  color: var(--text-tertiary-38);
+}
+.folder-row-item {
+  margin: 6px 14px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 14px;
+  background: rgba(20, 20, 24, 0.55);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+}
+.folder-row-item:active { transform: scale(0.98); }
+.folder-row-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary-38);
+  background: var(--surface-2);
+}
+.folder-row-ico img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.folder-access-lost {
+  margin: 4px 14px 10px 14px;
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  background: rgba(255, 184, 77, 0.12);
+  border: 1px solid rgba(255, 184, 77, 0.35);
+  color: #FFC46B;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.folder-root-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+}
+
+/* Primary CTA (folder-first empty state) */
+.btn-primary-tap {
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #06121A;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px var(--accent-glow);
+  transition: transform 0.09s ease-out, background-color 0.6s var(--ease-out);
+}
+.btn-primary-tap:active { transform: scale(0.95); }
+
+/* Search sheet results */
+.search-group-label {
+  padding: 12px 16px 4px 16px;
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 1.1px;
+  color: var(--accent);
+}
+.search-result-row {
+  margin: 6px 14px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 14px;
+  background: rgba(20, 20, 24, 0.55);
+  border: 1px solid var(--hairline);
+  cursor: pointer;
+}
+.search-result-row:active { transform: scale(0.98); }
+
+/* Living Now Playing — gentle breath on the cover while playing */
+@keyframes coverBreath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.012); }
+}
+html.is-breathing:not(.rms-breath) #player-artwork-img {
+  animation: coverBreath 3.4s ease-in-out infinite;
+}
+html.is-breathing.rms-breath #player-artwork-img {
+  transform: scale(var(--breath-scale, 1));
+  will-change: transform;
+}
+html.reduce-motion #player-artwork-img { animation: none !important; }
+
+/* Mini-player accent hairline (recolors with the palette) */
+#docked-mini-player {
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.45), inset 0 1.5px 0 rgba(126, 200, 227, 0.35);
+}
+#mini-progress-line {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+/* Deeper glass for the utility / transport deck */
+.deck-transport-row { border-radius: var(--radius-lg); }
+.transport-btn-round {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+}
+
 </style>
 </head>
 <body>
 
 <div id="daddyamp-root">
+  <!-- Folder scan progress pill -->
+  <div id="folder-scan-banner" aria-live="polite">
+    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.2-8.56"/><polyline points="21 3 21 8 16 8"/><line x1="12" y1="8" x2="12" y2="13"/></svg>
+    <span id="folder-scan-label">Reading&hellip;</span>
+  </div>
+
   <!-- LIVING WALLPAPER: blurred album art behind everything -->
   <div id="ambient-layer" aria-hidden="true">
     <img class="ambient-img" id="ambient-img-a" alt="">
     <img class="ambient-img" id="ambient-img-b" alt="">
     <div class="ambient-scrim"></div>
+    <div class="ambient-tint" id="ambient-tint"></div>
     <div class="ambient-vignette"></div>
   </div>
 
@@ -2332,15 +2572,15 @@ html.reduce-motion #full-player-screen { transition-duration: 0.001s !important;
       <svg class="icon icon-md" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
       <span>Library</span>
     </button>
-    <button class="nav-bottom-tab" id="bnav-tab-player" onclick="expandNowPlayingScreen()">
+    <button class="nav-bottom-tab" id="bnav-tab-search" onclick="showSearchSheet()">
       <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
-      <span>Player</span>
+      <span>Search</span>
     </button>
     <button class="nav-bottom-tab" id="bnav-tab-equalizer" onclick="showEqualizerSheet()">
       <svg class="icon icon-md" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
       <span>Equalizer</span>
     </button>
-    <button class="nav-bottom-tab" id="bnav-tab-settings" onclick="showSettingsSheet()">
+    <button class="nav-bottom-tab" id="bnav-tab-menu" onclick="showMenuSheet()">
       <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span>Settings</span>
     </button>
@@ -2630,6 +2870,59 @@ html.reduce-motion #full-player-screen { transition-duration: 0.001s !important;
   </div>
 
   <!-- 4. SETTINGS SHEET -->
+  <div class="sheet-backdrop-mask" id="sheet-mask-search" onclick="dismissAllSheets()">
+    <div class="sheet-content-dialog" onclick="event.stopPropagation()">
+      <div class="sheet-top-strip">
+        <span class="sheet-title-text">Search</span>
+        <button class="btn-action-tap" onclick="dismissAllSheets()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="padding: 0 14px 8px 14px;">
+        <div class="search-field-box">
+          <svg class="icon icon-sm search-prefix-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" class="search-text-input" id="search-global-input" placeholder="Songs, albums, artists, folders..." oninput="buildSearchResults(this.value)">
+        </div>
+      </div>
+      <div class="sheet-scroll-body" id="search-global-results" style="padding-top: 2px;"></div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop-mask" id="sheet-mask-foldermenu" onclick="dismissAllSheets()">
+    <div class="sheet-content-dialog" onclick="event.stopPropagation()">
+      <div class="sheet-top-strip">
+        <span class="sheet-title-text" id="folder-menu-heading">Folder</span>
+        <button class="btn-action-tap" onclick="dismissAllSheets()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-scroll-body">
+        <div class="action-menu-row" onclick="folderMenuAction('play')">&#9654; Play folder</div>
+        <div class="action-menu-row" onclick="folderMenuAction('shuffle')">&#10548; Shuffle folder</div>
+        <div class="action-menu-row" onclick="folderMenuAction('queue')">&#65291; Add to queue</div>
+        <div class="action-menu-row" onclick="folderMenuAction('rescan')">&#10227; Rescan</div>
+        <div class="action-menu-row" onclick="folderMenuAction('fullrescan')">&#10226; Full rescan</div>
+        <div class="action-menu-row" style="color: #FF5A5A;" onclick="folderMenuAction('remove')">Remove from library</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop-mask" id="sheet-mask-how" onclick="dismissAllSheets()">
+    <div class="sheet-content-dialog" onclick="event.stopPropagation()">
+      <div class="sheet-top-strip">
+        <span class="sheet-title-text">How music folders work</span>
+        <button class="btn-action-tap" onclick="dismissAllSheets()">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-scroll-body" style="padding: 4px 18px 18px 18px; font-size: 12.5px; line-height: 1.75; color: var(--text-secondary-64);">
+        <p><b style="color: var(--text-pure);">Pick a folder, not files.</b> Choose one or more directories that contain your albums — Music, Audio, a USB tree. Everything inside is scanned recursively.</p>
+        <p><b style="color: var(--text-pure);">Your library stays.</b> Roots and the catalog are saved with Android's persistable permissions, so the same music is still here the next time you open the app.</p>
+        <p><b style="color: var(--text-pure);">Files stay put.</b> Removing a folder from the library never deletes anything on your device.</p>
+      </div>
+    </div>
+  </div>
+
   <div class="sheet-backdrop-mask" id="sheet-mask-settings" onclick="dismissAllSheets()">
     <div class="sheet-content-dialog" onclick="event.stopPropagation()">
       <div class="sheet-top-strip">
@@ -2640,6 +2933,38 @@ html.reduce-motion #full-player-screen { transition-duration: 0.001s !important;
       </div>
       <div class="sheet-scroll-body">
         
+        <div class="settings-section-block">
+          <div class="settings-section-tag">Music Folders</div>
+          <div id="folder-roots-settings"></div>
+          <div style="display: flex; gap: 6px; padding: 0 14px 12px 14px;">
+            <button class="btn-import-header" style="height: 30px; padding: 0 12px; font-size: 11px;" onclick="addMusicFolder()">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add music folder
+            </button>
+            <button class="btn-import-header" style="height: 30px; padding: 0 12px; font-size: 11px;" onclick="folderFullRescanAll()">Full rescan</button>
+          </div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Ignore Short Tracks</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Skip very short clips (notifications, ringtones)</div>
+            </div>
+            <label class="toggle-switch-unit">
+              <input type="checkbox" id="toggle-folder-short" checked onchange="state.settings.folderIgnoreShort = this.checked; persistState();">
+              <span class="toggle-slider-bar"></span>
+            </label>
+          </div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Auto-scan on launch</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Cheap incremental check of enabled folders</div>
+            </div>
+            <label class="toggle-switch-unit">
+              <input type="checkbox" id="toggle-folder-autoscan" checked onchange="state.settings.folderAutoScan = this.checked; persistState();">
+              <span class="toggle-slider-bar"></span>
+            </label>
+          </div>
+        </div>
+
         <div class="settings-section-block">
           <div class="settings-section-tag">Library & Storage</div>
           <div class="setting-card-item">
@@ -2781,6 +3106,16 @@ html.reduce-motion #full-player-screen { transition-duration: 0.001s !important;
             </div>
             <label class="toggle-switch-unit">
               <input type="checkbox" id="toggle-reduce-motion" onchange="toggleReduceMotion()">
+              <span class="toggle-slider-bar"></span>
+            </label>
+          </div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Haptics</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Tactile ticks on play, skip and seek</div>
+            </div>
+            <label class="toggle-switch-unit">
+              <input type="checkbox" id="toggle-haptics" checked onchange="state.settings.haptics = this.checked; persistState();">
               <span class="toggle-slider-bar"></span>
             </label>
           </div>
@@ -3012,6 +3347,7 @@ let state = {
   sortKey: "title",       // title | artist | album | duration | year
   sortDesc: false,
   folderPath: null,       // open folder (null = folder root). Folders built from song.filePath
+  folderScope: null,      // { rootUri, relPath } — Poweramp folder-rooted drill
   playerCenterMode: "art", // art, lyrics, queue, specs, viz
   playlists: [],           // [{ id, name, createdAt, trackIds }]
   listenHistory: [],       // [{ ts, id, title, artist, dur }] newest-first
@@ -3027,14 +3363,16 @@ let state = {
   userScrolledLyrics: false,
   targetContextSong: null,
   palette: {
-    accent: "#00E5FF",
-    soft: "rgba(0, 229, 255, 0.12)",
-    ambient: "rgba(0, 229, 255, 0.08)"
+    accent: "#7EC8E3",
+    accent2: "#7EC8E3",
+    soft: "rgba(126, 200, 227, 0.12)",
+    ambient: "rgba(126, 200, 227, 0.08)",
+    scrimTint: "rgba(0, 0, 0, 0)"
   },
   settings: {
     filterShort: true,
     dynamicTheme: true,
-    accentColor: "#00E5FF",
+    accentColor: "#7EC8E3",
     autoPause: true,
     lrclibFetch: true,
     autoQueue: true,
@@ -3043,7 +3381,10 @@ let state = {
     crossfadeSec: 0,
     seekStyle: "wave",
     blurLevel: "med",
-    reduceMotion: false
+    reduceMotion: false,
+    folderIgnoreShort: true,
+    folderAutoScan: true,
+    haptics: true
   },
   sleepTimer: {
     active: false,
@@ -3090,6 +3431,8 @@ window.addEventListener("DOMContentLoaded", () => {
   selectLibraryTab("tracks");
   loadTrack(state.currentIndex, false);
   if (state.songs[state.currentIndex]) setAmbientArt(state.songs[state.currentIndex].artwork || "artwork/default.png", true);
+  initFolderSystem();
+  attachCoverGestures();
 
   setInterval(syncPlaybackPosition, 100);
 
@@ -3190,6 +3533,13 @@ function applyPersistedSettings() {
   applyTheme(state.settings.theme || "abyss");
   applyBlurLevel(state.settings.blurLevel || "med");
   syncFluidSettingsUI();
+  const fs = document.getElementById("toggle-folder-short");
+  if (fs) fs.checked = state.settings.folderIgnoreShort !== false;
+  const fa = document.getElementById("toggle-folder-autoscan");
+  if (fa) fa.checked = state.settings.folderAutoScan !== false;
+  const hp = document.getElementById("toggle-haptics");
+  if (hp) hp.checked = state.settings.haptics !== false;
+  if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
 }
 
 function refreshBadges() {
@@ -3205,7 +3555,7 @@ function refreshBadges() {
   const likedCount = state.songs.filter(s => s.favorite).length;
   document.getElementById("tag-liked-count").textContent = likedCount;
 
-  const foldersCount = folderNames().length;
+  const foldersCount = folderBadgeCount();
   const foldersTag = document.getElementById("tag-folders-count");
   if (foldersTag) foldersTag.textContent = foldersCount;
   const listsTag = document.getElementById("tag-lists-count");
@@ -3399,6 +3749,8 @@ function commitSeek() {
   } else {
     audioEl.currentTime = state.currentTime;
   }
+  haptic("seek");
+  saveSession(true);
 }
 
 /* =========================================================================
@@ -3510,6 +3862,7 @@ function loadTrack(index, autoPlay = true) {
 
   updateActivePlayingRowInDOM();
   renderInPlayerQueue();
+  saveSession(true);
 }
 
 function updateActivePlayingRowInDOM() {
@@ -3567,6 +3920,8 @@ function togglePlayPauseState() {
     state.isPlaying = false;
     updatePlayButtonVisuals(false);
   }
+  haptic("tap");
+  saveSession(true);
   updateActivePlayingRowInDOM();
 }
 
@@ -3581,10 +3936,12 @@ function updatePlayButtonVisuals(playing) {
     }
     btn.classList.toggle("is-playing", !!playing);
   });
+  document.documentElement.classList.toggle("is-breathing", !!playing && !state.settings.reduceMotion);
 }
 
 function executePlayNext() {
   if (state.songs.length === 0) return;
+  haptic("skip");
 
   if (state.repeatMode === 2) {
     loadTrack(state.currentIndex, true);
@@ -3668,7 +4025,7 @@ function buildDynamicFill(limit = 12) {
 }
 
 const THEMES = {
-  abyss:  { label: "Dark Abyss",  bg: "#050506", base: "#0C0C0E", panel: "#141418", card: "#1C1C22", accent: "#6BD6F1", text: "#F2F2F5", text2: "rgba(255,255,255,0.62)", text3: "rgba(255,255,255,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(107,214,241,0.40)" },
+  abyss:  { label: "Dark Abyss",  bg: "#050506", base: "#0C0C0E", panel: "#141418", card: "#1C1C22", accent: "#7EC8E3", text: "#F2F2F5", text2: "rgba(255,255,255,0.62)", text3: "rgba(255,255,255,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(107,214,241,0.40)" },
   ocean:  { label: "Ocean Depths", bg: "#061019", base: "#0B1A26", panel: "#12242F", card: "#182E3B", accent: "#5FC7D9", text: "#EAF5F7", text2: "rgba(234,245,247,0.62)", text3: "rgba(234,245,247,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(95,199,217,0.40)" },
   forest: { label: "Forest Night", bg: "#05110B", base: "#0A1F17", panel: "#112A20", card: "#173327", accent: "#5FCC8A", text: "#EBF7F0", text2: "rgba(235,247,240,0.62)", text3: "rgba(235,247,240,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(95,204,138,0.40)" },
   sunset: { label: "Sunset Pro",   bg: "#140508", base: "#1E0C10", panel: "#2A1319", card: "#361A20", accent: "#E88A71", text: "#FBEFEC", text2: "rgba(251,239,236,0.62)", text3: "rgba(251,239,236,0.38)", border: "rgba(255,255,255,0.08)", borderActive: "rgba(232,138,113,0.40)" }
@@ -3749,6 +4106,7 @@ function syncPlaybackSettingsUI() {
 }
 
 function executePlayPrevious() {
+  haptic("skip");
   if (state.songs.length === 0) return;
   const prevIdx = (state.currentIndex - 1 + state.songs.length) % state.songs.length;
   loadTrack(prevIdx, true);
@@ -3835,6 +4193,7 @@ function formatDuration(sec) {
 
 let lastRenderedTimeStr = "";
 function updateTimerDisplays() {
+  saveSession(false);
   const elapsedStr = formatDuration(state.currentTime);
   if (elapsedStr !== lastRenderedTimeStr) {
     lastRenderedTimeStr = elapsedStr;
@@ -3938,21 +4297,33 @@ function updateHeartVisuals(isFav) {
    CACHED FAST PALETTE EXTRACTION (RESTRAINED AMBIENT ILLUMINATION)
    ========================================================================= */
 
+function rgbToHex(r, g, b) {
+  return "#" + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+}
+
+function applyPaletteNew(accent, accent2, scrimTint) {
+  const soft = accent + "20", ambient = accent + "15";
+  state.palette.accent = accent;
+  state.palette.soft = soft;
+  state.palette.ambient = ambient;
+  state.palette.accent2 = accent2 || accent;
+  state.palette.scrimTint = scrimTint || "rgba(0, 0, 0, 0)";
+  const st = document.documentElement.style;
+  st.setProperty("--accent", accent);
+  st.setProperty("--accent-soft", soft);
+  st.setProperty("--accent-ambient", ambient);
+  st.setProperty("--accent-2", state.palette.accent2);
+  st.setProperty("--scrim-tint", state.palette.scrimTint);
+  if (typeof drawPowerampScrubber === "function") drawPowerampScrubber(true);
+}
+
 function extractCoverPalette(song) {
   if (!song || !song.artwork) return;
-  
   if (paletteCache[song.id]) {
-    const cached = paletteCache[song.id];
-    state.palette.accent = cached.accent;
-    state.palette.soft = cached.soft;
-    state.palette.ambient = cached.ambient;
-    document.documentElement.style.setProperty("--accent", cached.accent);
-    document.documentElement.style.setProperty("--accent-soft", cached.soft);
-    document.documentElement.style.setProperty("--accent-ambient", cached.ambient);
-    drawPowerampScrubber(true);
+    const c = paletteCache[song.id];
+    applyPaletteNew(c.accent, c.accent2, c.scrimTint);
     return;
   }
-
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.src = song.artwork;
@@ -3963,49 +4334,44 @@ function extractCoverPalette(song) {
       const x = c.getContext("2d");
       x.drawImage(img, 0, 0, 30, 30);
       const d = x.getImageData(0, 0, 30, 30).data;
-
       let r = 0, g = 0, b = 0, count = 0;
-      for (let i = 0; i < d.length; i += 16) {
-        const br = (d[i] + d[i+1] + d[i+2]) / 3;
-        if (br > 40 && br < 220) {
-          r += d[i]; g += d[i+1]; b += d[i+2];
+      const bins = {};
+      for (let i = 0; i < d.length; i += 4) {
+        const br = (d[i] + d[i + 1] + d[i + 2]) / 3;
+        if (br > 28 && br < 228) {
+          r += d[i]; g += d[i + 1]; b += d[i + 2];
           count++;
+          try {
+            const hsl = hexToHsl(rgbToHex(d[i], d[i + 1], d[i + 2]));
+            const bucket = Math.round(hsl[0] / 24) % 15;
+            if (!bins[bucket]) bins[bucket] = { r: 0, g: 0, b: 0, n: 0 };
+            bins[bucket].r += d[i]; bins[bucket].g += d[i + 1]; bins[bucket].b += d[i + 2]; bins[bucket].n++;
+          } catch (e) {}
         }
       }
-
+      let accent = "#7EC8E3", accent2 = "#7EC8E3", scrimTint = "rgba(0, 0, 0, 0)";
       if (count > 0) {
-        r = Math.floor(r / count);
-        g = Math.floor(g / count);
-        b = Math.floor(b / count);
-        const accent = `rgb(${r}, ${g}, ${b})`;
-        const soft = `rgba(${r}, ${g}, ${b}, 0.12)`;
-        const ambient = `rgba(${r}, ${g}, ${b}, 0.08)`;
-
-        paletteCache[song.id] = { accent, soft, ambient };
-        state.palette.accent = accent;
-        state.palette.soft = soft;
-        state.palette.ambient = ambient;
-
-        document.documentElement.style.setProperty("--accent", accent);
-        document.documentElement.style.setProperty("--accent-soft", soft);
-        document.documentElement.style.setProperty("--accent-ambient", ambient);
-        drawPowerampScrubber(true);
+        r = Math.floor(r / count); g = Math.floor(g / count); b = Math.floor(b / count);
+        accent = desatAccent(rgbToHex(r, g, b));
+        try {
+          const hsl = hexToHsl(accent);
+          const h2 = (hsl[0] + 30) % 360;
+          accent2 = hslToHex(h2, Math.max(8, Math.round(hsl[1] * 0.5)), Math.round(Math.min(52, hsl[2] * 0.72)));
+        } catch (e) { accent2 = accent; }
+        scrimTint = "rgba(" + Math.floor(r * 0.42) + ", " + Math.floor(g * 0.42) + ", " + Math.floor(b * 0.42) + ", 0.55)";
       }
+      paletteCache[song.id] = { accent, accent2, scrimTint };
+      applyPaletteNew(accent, accent2, scrimTint);
     } catch (e) {}
   };
 }
 
 function applyPaletteTheme(hex) {
-  state.settings.accentColor = hex;
-  state.palette.accent = hex;
-  state.palette.soft = hex + "20";
-  state.palette.ambient = hex + "15";
-  document.documentElement.style.setProperty("--accent", hex);
-  document.documentElement.style.setProperty("--accent-soft", hex + "20");
-  document.documentElement.style.setProperty("--accent-ambient", hex + "15");
-  drawPowerampScrubber(true);
+  const accent = desatAccent(hex);
+  applyPaletteNew(accent, accent, "rgba(0, 0, 0, 0)");
+  state.settings.accentColor = accent;
   persistState();
-  displayToast(`Accent color set to ${hex}`);
+  displayToast(`Accent color set to ${accent}`);
 }
 
 /* =========================================================================
@@ -4247,6 +4613,15 @@ function stopVisualizer() {
 }
 
 window.onVisualizerData = function(csv) {
+  try {
+    const first = parseFloat(String(csv || "").split(",")[0]);
+    if (isFinite(first)) {
+      const norm = Math.min(1, Math.abs(first) / 80);
+      document.documentElement.style.setProperty("--breath-scale", (1 + norm * 0.018).toFixed(4));
+      document.documentElement.classList.add("rms-breath");
+    }
+  } catch (e) {}
+
   try {
     const parts = String(csv || "").split(",");
     for (let i = 0; i < Math.min(parts.length, 32); i++) {
@@ -4775,6 +5150,7 @@ function dirBaseName(p) {
 
 function renderFolderBrowser() {
   const target = document.getElementById("library-render-target");
+  if (folderState.roots.length > 0) { renderFolderRootsBrowser(); return; }
   const folders = buildFolderIndex();
 
   if (Object.keys(folders).length === 0) {
@@ -5483,6 +5859,772 @@ function syncFluidSettingsUI() {
   if (rm) rm.checked = !!state.settings.reduceMotion;
 }
 
+/* =========================================================================
+   POWERAMP MUSIC FOLDERS — app-owned directory library.
+   Roots (SAF trees) live natively with persistable permissions; the visible
+   catalog lives here in IndexedDB; scans stream in chunked batches; the
+   library + last playback survive app restarts.
+   ========================================================================= */
+
+const FOLDER_DB_NAME = "daddyamp_db";
+const FOLDER_DB_VERSION = 1;
+const folderDb = { db: null };
+
+function folderDbOpen() {
+  return new Promise((resolve, reject) => {
+    if (folderDb.db) return resolve(folderDb.db);
+    if (!window.indexedDB) return reject(new Error("indexeddb-unavailable"));
+    const req = indexedDB.open(FOLDER_DB_NAME, FOLDER_DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains("roots")) db.createObjectStore("roots", { keyPath: "uri" });
+      if (!db.objectStoreNames.contains("tracks")) db.createObjectStore("tracks", { keyPath: "url" });
+    };
+    req.onsuccess = () => { folderDb.db = req.result; resolve(req.result); };
+    req.onerror = () => reject(req.error || new Error("indexeddb-open-failed"));
+  });
+}
+
+function folderDbTx(store, mode, fn) {
+  return folderDbOpen().then(db => new Promise((resolve, reject) => {
+    let tx;
+    try { tx = db.transaction(store, mode); } catch (e) { reject(e); return; }
+    const os = tx.objectStore(store);
+    let out;
+    try { out = fn(os); } catch (e) { reject(e); return; }
+    tx.oncomplete = () => resolve(out && out.result !== undefined ? out.result : out);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("tx-aborted"));
+  }));
+}
+function folderDbGetAll(store) { return folderDbTx(store, "readonly", os => os.getAll()); }
+function folderDbPut(store, items) { return folderDbTx(store, "readwrite", os => { (Array.isArray(items) ? items : [items]).forEach(i => os.put(i)); }); }
+function folderDbDelete(store, keys) { return folderDbTx(store, "readwrite", os => { (Array.isArray(keys) ? keys : [keys]).forEach(k => os.delete(k)); }); }
+
+const folderState = {
+  roots: [],      // { uri, name, enabled, lastScan, accessLost }
+  tracks: new Map(), // url -> song (source === "folder")
+  loading: false,
+  scanning: new Map() // uri -> {running, scanned, added, updated, removed, currentPath, done}
+};
+
+function folderRootByUri(uri) { return folderState.roots.find(r => r.uri === uri); }
+function folderSongs() { return Array.from(folderState.tracks.values()); }
+function folderSongCount(uri) {
+  if (!uri) return folderState.tracks.size;
+  let n = 0;
+  folderState.tracks.forEach(t => { if (t.rootUri === uri) n++; });
+  return n;
+}
+function folderBadgeCount() {
+  const roots = folderState.roots.length;
+  const legacy = Object.keys(buildFolderIndex()).length;
+  return roots + legacy;
+}
+
+/** Nested disk tree of one root: { name, relPath, children: [], songs: [] } */
+function folderTreeOf(rootUri) {
+  const root = { name: folderRootByUri(rootUri)?.name || "Music", relPath: "", children: [], songs: [] };
+  const byPath = { "": root };
+  folderState.tracks.forEach(t => {
+    if (t.rootUri !== rootUri) return;
+    const parts = String(t.folderPath || "").split("/").filter(Boolean);
+    let node = root, acc = "";
+    for (const p of parts) {
+      acc = acc ? `${acc}/${p}` : p;
+      if (!byPath[acc]) {
+        const child = { name: p, relPath: acc, children: [], songs: [] };
+        byPath[acc] = child;
+        node.children.push(child);
+      }
+      node = byPath[acc];
+    }
+    node.songs.push(t);
+  });
+  return root;
+}
+
+function folderApplyToLibrary() {
+  state.songs = state.songs.filter(s => s.source !== "folder").concat(folderSongs());
+  if (typeof refreshBadges === "function") refreshBadges();
+}
+
+function persistFolderRoots() {
+  if (!window.indexedDB) return;
+  folderDbPut("roots", folderState.roots).catch(() => {});
+}
+function persistFolderSongs() {
+  if (!window.indexedDB) return;
+  const all = folderSongs();
+  let i = 0;
+  const step = () => {
+    const slice = all.slice(i, i + 400);
+    i += 400;
+    if (slice.length) folderDbPut("tracks", slice).catch(() => {}).then(step);
+  };
+  step();
+}
+
+async function folderInit() {
+  if (folderState.loading) return;
+  folderState.loading = true;
+  try {
+    if (window.indexedDB) {
+      const roots = await folderDbGetAll("roots");
+      const tracks = await folderDbGetAll("tracks");
+      folderState.roots = (roots || []).map(r => ({ ...r }));
+      folderState.tracks = new Map((tracks || []).map(t => [t.url, t]));
+    }
+    if (isAndroid && window.AndroidBridge.getFolderRoots) {
+      let native = [];
+      try { native = JSON.parse(String(window.AndroidBridge.getFolderRoots() || "[]")); } catch (e) {}
+      const uriSet = new Set(native.map(n => n.uri));
+      // Native is source of truth for roots
+      folderState.roots = native.map(n => {
+        const local = folderRootByUri(n.uri) || {};
+        return {
+          uri: n.uri, name: n.name || local.name || "Music",
+          enabled: n.enabled !== false, lastScan: n.lastScan || local.lastScan || 0,
+          accessLost: !!n.accessLost
+        };
+      });
+      // Roots that exist in IDB but no longer on native: keep catalog but flag
+      if (uriSet.size === 0) {
+        // don't wipe: folders may be handled by JS-only state on web
+      }
+      persistFolderRoots();
+    }
+  } catch (e) {
+    console.warn("folderInit:", e);
+  }
+  folderState.loading = false;
+  folderApplyToLibrary();
+  if (typeof renderLibraryTab === "function") renderLibraryTab();
+}
+
+/* ---------------------------------------------------------------- scan flow */
+
+function addMusicFolder() {
+  if (!isAndroid) { displayToast("Music Folders are available in the Android app"); return; }
+  try { window.AndroidBridge.pickFolderTree(); } catch (e) {}
+}
+
+window.onFolderRootPicked = function(meta) {
+  if (!meta || !meta.uri) return;
+  let root = folderRootByUri(meta.uri);
+  const wasNew = !root;
+  if (!root) {
+    root = { uri: meta.uri, name: meta.name || "Music", enabled: true, lastScan: 0, accessLost: false };
+    folderState.roots.push(root);
+  } else {
+    root.accessLost = false;
+    root.name = meta.name || root.name;
+  }
+  persistFolderRoots();
+  startFolderScan(meta.uri, true);
+  displayToast(`Scanning “${root.name}”…`);
+  selectLibraryTab("folders");
+};
+
+function startFolderScan(rootUri, full) {
+  const root = folderRootByUri(rootUri);
+  if (!root || !isAndroid || !window.AndroidBridge.scanFolder) return;
+  folderState.scanning.set(rootUri, { running: true, scanned: 0, added: 0, updated: 0, removed: 0, currentPath: "", done: false });
+  showScanBanner(rootUri);
+  const ignoreMs = state.settings.folderIgnoreShort === false ? 0 : 10000;
+  try { window.AndroidBridge.scanFolder(rootUri, !!full, ignoreMs); } catch (e) {}
+}
+
+window.onFolderScanProgress = function(p) {
+  if (!p || !p.rootUri) return;
+  const uri = p.rootUri;
+  const st = folderState.scanning.get(uri) || { running: true, scanned: 0, added: 0, updated: 0, removed: 0, currentPath: "", done: false };
+  if (typeof p.scanned === "number") st.scanned = p.scanned;
+  if (typeof p.added === "number") st.added = p.added;
+  if (typeof p.updated === "number") st.updated = p.updated;
+  if (p.currentPath) st.currentPath = p.currentPath;
+
+  const batch = p.batch || [];
+  let changed = false;
+  batch.forEach(s => {
+    if (!s || !s.url) return;
+    folderState.tracks.set(s.url, s);
+    changed = true;
+  });
+
+  if (p.phase === "done") {
+    (p.removedUris || []).forEach(u => folderState.tracks.delete(u));
+    st.done = true;
+    st.running = false;
+    const root = folderRootByUri(uri);
+    if (root) { root.lastScan = Date.now(); root.accessLost = false; }
+    persistFolderRoots();
+    if (changed || (p.removedCount || 0) > 0) persistFolderSongs();
+    hideScanBanner(uri);
+    folderApplyToLibrary();
+    if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
+    renderLibraryTab();
+    if (p.error) {
+      displayToast(`Folder scan error: ${p.error}`);
+    } else {
+      displayToast(`Library updated — ${folderSongCount(uri)} tracks`);
+    }
+  } else {
+    if (changed) { persistFolderSongs(); folderApplyToLibrary(); }
+  }
+  updateScanBanner(uri, st);
+};
+
+function setFolderEnabled(uri, on) {
+  const root = folderRootByUri(uri);
+  if (!root) return;
+  root.enabled = on;
+  persistFolderRoots();
+  if (isAndroid && window.AndroidBridge.setFolderEnabled) {
+    try { window.AndroidBridge.setFolderEnabled(uri, on); } catch (e) {}
+  }
+  if (on) startFolderScan(uri, false);
+  if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
+}
+
+function removeFolderRoot(uri) {
+  const root = folderRootByUri(uri);
+  if (!root) return;
+  let n = 0;
+  folderState.tracks.forEach((t, key) => { if (t.rootUri === uri) { folderState.tracks.delete(key); n++; } });
+  folderState.roots = folderState.roots.filter(r => r.uri !== uri);
+  persistFolderRoots();
+  persistFolderSongs();
+  folderApplyToLibrary();
+  if (isAndroid && window.AndroidBridge.removeFolder) {
+    try { window.AndroidBridge.removeFolder(uri); } catch (e) {}
+  }
+  renderLibraryTab();
+  if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
+  displayToast(`Removed from library (${n} tracks kept on device)`);
+}
+
+async function folderAutoRescan() {
+  if (state.settings.folderAutoScan === false) return;
+  const hadCatalog = folderState.tracks.size > 0;
+  for (const root of folderState.roots) {
+    if (!root.enabled) continue;
+    // If storage was cleared but roots survived natively, force a full scan once
+    if (!hadCatalog || root.lastScan === 0) {
+      startFolderScan(root.uri, true);
+    } else {
+      startFolderScan(root.uri, false);
+    }
+  }
+}
+
+async function initFolderSystem() {
+  await folderInit();
+  if (folderState.roots.length > 0) {
+    restoreSession();
+    folderAutoRescan();
+  }
+}
+
+/* ------------------------------------------------------- session restore */
+
+function saveSession(force) {
+  try {
+    const cur = state.songs[state.currentIndex];
+    if (!cur) return;
+    const now = Date.now();
+    if (!force && now - (saveSession._t || 0) < 4000) return;
+    saveSession._t = now;
+    localStorage.setItem("daddyamp_session", JSON.stringify({
+      path: cur.path,
+      time: state.currentTime,
+      duration: state.duration,
+      queue: state.queue.map(q => q.path),
+      repeat: state.repeatMode,
+      shuffle: state.shuffle,
+      volume: state.volume,
+      ts: now
+    }));
+  } catch (e) {}
+}
+
+function restoreSession() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem("daddyamp_session") || "null"); } catch (e) {}
+  if (!s || !s.path) return;
+  const idx = state.songs.findIndex(x => x.path === s.path);
+  if (idx < 0) return;
+  if (Array.isArray(s.queue)) {
+    state.queue = s.queue.map(p => state.songs.find(x => x.path === p)).filter(Boolean);
+  }
+  state.shuffle = !!s.shuffle;
+  state.repeatMode = typeof s.repeat === "number" ? s.repeat : 0;
+  state.pendingSeekMs = Math.max(0, Math.floor((s.time || 0) * 1000));
+  loadTrack(idx, false);
+  displayToast(`Resumed — ${state.songs[idx].title}`);
+}
+
+/* -------------------------------------------------------------- haptics */
+
+function haptic(kind) {
+  if (state.settings.haptics === false || state.settings.reduceMotion) return;
+  if (!isAndroid || !window.AndroidBridge.vibrate) return;
+  try {
+    window.AndroidBridge.vibrate(kind === "skip" ? 14 : kind === "seek" ? 8 : 16);
+  } catch (e) {}
+}
+
+/* ------------------------------------------------------- scan banner UI */
+
+function showScanBanner(rootUri) {
+  const el = document.getElementById("folder-scan-banner");
+  if (!el) return;
+  el.classList.add("visible");
+  el.dataset.rootUri = rootUri || "";
+  updateScanBanner(rootUri, folderState.scanning.get(rootUri));
+}
+function updateScanBanner(rootUri, st) {
+  const el = document.getElementById("folder-scan-banner");
+  if (!el) return;
+  const root = folderRootByUri(rootUri);
+  const label = document.getElementById("folder-scan-label");
+  if (label && root) {
+    label.textContent = st && st.done ? `Reading “${root.name}”… done` : `Reading “${root.name}”… ${(st && st.scanned || 0).toLocaleString()} tracks`;
+  }
+}
+function hideScanBanner(rootUri) {
+  const el = document.getElementById("folder-scan-banner");
+  if (!el) return;
+  if (!rootUri || el.dataset.rootUri === rootUri) {
+    const still = Array.from(folderState.scanning.values()).some(s => s.running);
+    if (!still) el.classList.remove("visible");
+  }
+}
+
+/* ============================================================ UI: settings */
+
+function renderMusicFoldersSettings() {
+  const holder = document.getElementById("folder-roots-settings");
+  if (!holder) return;
+  const lost = folderState.roots.filter(r => r.accessLost);
+
+  let html = "";
+  if (lost.length > 0) {
+    html += `<div class="folder-access-lost" onclick="addMusicFolder()">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Folder access lost — tap to restore</span>
+    </div>`;
+  }
+
+  folderState.roots.forEach((root, i) => {
+    const count = folderSongCount(root.uri);
+    const when = root.lastScan ? new Date(root.lastScan).toLocaleDateString() : "never";
+    const toggleId = `folder-root-toggle-${i}`;
+    html += `<div class="folder-root-settings-row">
+      <label class="toggle-switch-unit" style="flex-shrink: 0;">
+        <input type="checkbox" id="${toggleId}" ${root.enabled ? "checked" : ""} onchange="setFolderEnabled('${escJs(root.uri)}', this.checked)">
+        <span class="toggle-slider-bar"></span>
+      </label>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-weight: 650; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(root.name)}</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">${count} tracks • scanned ${when}</div>
+      </div>
+      <button class="btn-import-header" style="height: 28px; padding: 0 8px; font-size: 10.5px;" onclick="startFolderScan('${escJs(root.uri)}', false)">Rescan</button>
+      <button class="btn-import-header" style="height: 28px; padding: 0 8px; font-size: 10.5px; color: #FF5A5A;" onclick="confirmRemoveFolder('${escJs(root.uri)}')">Remove</button>
+    </div>`;
+  });
+  if (folderState.roots.length === 0) {
+    html += `<div style="padding: 4px 14px 10px 14px; font-size: 11.5px; color: var(--text-tertiary); line-height: 1.6;">
+      No folders yet. Pick a folder that contains your albums — everything inside is scanned and kept next time you open the app.
+    </div>`;
+  }
+  holder.innerHTML = html;
+}
+
+function confirmRemoveFolder(uri) {
+  const root = folderRootByUri(uri);
+  if (!root) return;
+  if (!window.confirm(`Remove “${root.name}” from library?\nFiles on your device won't be deleted.`)) return;
+  removeFolderRoot(uri);
+}
+
+/* ==================================================== UI: folders browser */
+
+function renderFolderRootsBrowser() {
+  const target = document.getElementById("library-render-target");
+  if (!target) return;
+
+  if (folderState.roots.length === 0 && Object.keys(buildFolderIndex()).length === 0) {
+    target.innerHTML = `
+      <div class="empty-state-craft">
+        <div class="empty-state-illustration" style="display:flex; align-items:center; justify-content:center;">
+          <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            <line x1="12" y1="10" x2="12" y2="16"/><line x1="9" y1="13" x2="15" y2="13"/>
+          </svg>
+        </div>
+        <div class="empty-state-headline">Add music folder</div>
+        <div class="empty-state-sub">Pick a folder with your albums. Everything inside is scanned and kept when you reopen the app.</div>
+        <div class="empty-state-ctas">
+          <button class="btn-primary-tap" onclick="addMusicFolder()">Add music folder</button>
+          <button class="btn-import-header" onclick="invokeAudioImport()">Import files</button>
+          <button class="btn-import-header" onclick="invokeDeviceScan()">Scan device audio</button>
+        </div>
+        <button class="btn-import-header" style="margin-top: 4px;" onclick="showFolderHowItWorks()">How it works</button>
+      </div>`;
+    return;
+  }
+
+  if (state.folderScope) {
+    renderFolderRootDrill();
+    return;
+  }
+
+  // Root cards
+  let html = `<div style="padding: 10px 14px 2px 14px; display: flex; justify-content: space-between; align-items: center;">
+    <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.6px; color: var(--text-secondary-64);">MUSIC FOLDERS</div>
+    <button class="btn-import-header" style="height: 28px; padding: 0 10px; font-size: 11px;" onclick="addMusicFolder()">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add folder
+    </button>
+  </div>`;
+
+  folderState.roots.forEach((root, i) => {
+    const tree = folderTreeOf(root.uri);
+    const flat = folderSongs().filter(s => s.rootUri === root.uri);
+    const art = flat.slice(0, 4);
+    const mosaic = art.length ? art.map(s => `<img src="${escAttr(s.artwork || "artwork/default.png")}" alt="">`).join("")
+      : `<div style="width: 48px; height: 48px; border-radius: 12px; background: var(--surface-2); display:flex; align-items:center; justify-content:center; color: var(--text-tertiary-38);"><svg class="icon icon-md" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>`;
+    const subCount = tree.children.length;
+    const when = root.lastScan ? new Date(root.lastScan).toLocaleDateString() : "never scanned";
+    html += `<div class="folder-root-card" onclick="openFolderScope('${escJs(root.uri)}', '')" oncontextmenu="openFolderScopeMenu('${escJs(root.uri)}',''); event.preventDefault();">
+      <div class="folder-root-mosaic">${mosaic}</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-weight: 650; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(root.name)}</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">${flat.length} tracks ${subCount ? `• ${subCount} folders` : ""} • ${when}</div>
+        ${root.accessLost ? `<div style="font-size: 10.5px; color: #FFB84D; font-weight: 650; margin-top: 2px;">⚠ Access lost — tap to restore</div>` : ""}
+      </div>
+      <svg class="icon icon-sm" style="color: var(--text-tertiary-38);" viewBox="0 0 24 24" onclick="event.stopPropagation(); openFolderScopeMenu('${escJs(root.uri)}', '')"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+    </div>`;
+  });
+
+  // Legacy (device scan / file imports) still grouped by on-device folders
+  const legacy = buildFolderIndex();
+  const legacyNames = folderState.roots.length > 0 ? Object.keys(legacy).filter(k => k !== "Library" || legacy[k].length) : Object.keys(legacy);
+  if (legacyNames.length > 0) {
+    html += `<div class="folder-section-label">OTHER FOLDERS (DEVICE SCAN & IMPORTS)</div>`;
+    legacyNames.sort((a, b) => a.localeCompare(b)).forEach(folder => {
+      const list = legacy[folder];
+      const first = list[0]?.song;
+      html += `<div class="folder-row-item" onclick="state.folderPath=${quote(folder)}; state.folderScope = null; renderLibraryTab();">
+        <div class="folder-row-ico">${first ? `<img src="${escAttr(first.artwork || "artwork/default.png")}" alt="">` : `<svg class="icon icon-md" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size: 13px; font-weight: 600; overflow:hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(dirBaseName(folder))}</div>
+          <div style="font-size: 11px; color: var(--text-tertiary);">${list.length} tracks</div>
+        </div>
+        <svg class="icon icon-sm" style="color: var(--text-tertiary-38);" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`;
+    });
+  }
+
+  html += `<div style="padding: 14px; text-align: center; font-size: 10.5px; color: var(--text-tertiary-38);">Folders mirror the disk tree — subfolders are included automatically</div>`;
+  target.innerHTML = html;
+}
+
+function openFolderScope(uri, relPath) {
+  state.folderScope = { rootUri: uri, relPath: relPath || "" };
+  state.folderPath = null;
+  renderLibraryTab();
+}
+
+function openFolderScopeMenu(uri, relPath) {
+  state.folderScope = { rootUri: uri, relPath: relPath || "" };
+  const root = folderRootByUri(uri);
+  document.getElementById("folder-menu-heading").textContent = relPath ? dirBaseName(relPath) : (root?.name || "Folder");
+  dismissAllSheets();
+  document.getElementById("sheet-mask-foldermenu").classList.add("open");
+}
+
+function renderFolderRootDrill() {
+  const target = document.getElementById("library-render-target");
+  const scope = state.folderScope;
+  if (!scope) { renderFolderRootsBrowser(); return; }
+  const root = folderRootByUri(scope.rootUri);
+  const tree = folderTreeOf(scope.rootUri);
+  const node = !scope.relPath ? tree : findTreeNode(tree, scope.relPath);
+  if (!node) { state.folderScope = null; renderFolderRootsBrowser(); return; }
+
+  const allSongs = flattenFolderNode(node);
+  const totalSecs = allSongs.reduce((a, c) => a + (c.duration || 0), 0);
+  const art = allSongs[0];
+  const crumbs = scope.relPath ? scope.relPath.split("/") : [];
+  let crumbHtml = `<button class="btn-import-header" style="height: 26px; padding: 0 8px; font-size: 10.5px;" onclick="state.folderScope=null; renderLibraryTab();">${escHtml(root?.name || "Folders")}</button>`;
+  let acc = "";
+  crumbs.forEach((c, i) => {
+    acc = acc ? `${acc}/${c}` : c;
+    crumbHtml += `<svg class="icon icon-xs" style="color: var(--text-tertiary-38);" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      <button class="btn-import-header" style="height: 26px; padding: 0 8px; font-size: 10.5px;" onclick="openFolderScope('${escJs(scope.rootUri)}', ${quote(acc)})">${escHtml(c)}</button>`;
+  });
+
+  const header = `
+    <div style="padding: 8px 14px 2px 14px;">${crumbHtml}</div>
+    <div class="drilldown-header-card">
+      <div class="drilldown-art-box">${art ? `<img src="${escAttr(art.artwork || "artwork/default.png")}" alt="">` : ""}</div>
+      <div class="drilldown-info-col">
+        <div class="drilldown-main-title">${escHtml(node.relPath ? dirBaseName(node.relPath) : (root?.name || "Music"))}</div>
+        <div class="drilldown-sub-text">${allSongs.length} tracks • ${formatDuration(totalSecs)}</div>
+        <div class="drilldown-buttons-row">
+          <button class="btn-import-header folder-play-all" style="height: 30px; padding: 0 10px; font-size: 11px;">
+            <svg class="icon icon-xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> Play All
+          </button>
+          <button class="btn-import-header folder-play-shuffle" style="height: 30px; padding: 0 10px; font-size: 11px;">
+            <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg> Shuffle
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="folder-scope-body"></div>`;
+  target.innerHTML = header;
+
+  const holder = document.getElementById("folder-scope-body");
+  const body = document.createElement("div");
+  holder.appendChild(body);
+
+  if (node.children.length > 0) {
+    let sub = `<div style="padding: 4px 14px;">`;
+    node.children.forEach(ch => {
+      const songs = flattenFolderNode(ch);
+      const first = songs[0];
+      sub += `<div class="folder-row-item" onclick="openFolderScope('${escJs(scope.rootUri)}', ${quote(ch.relPath)})" oncontextmenu="openFolderScopeMenu('${escJs(scope.rootUri)}', ${quote(ch.relPath)}); event.preventDefault();">
+        <div class="folder-row-ico">${first ? `<img src="${escAttr(first.artwork || "artwork/default.png")}" alt="">` : `<svg class="icon icon-md" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size: 13px; font-weight: 600; overflow:hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(ch.name)}</div>
+          <div style="font-size: 11px; color: var(--text-tertiary);">${songs.length} tracks</div>
+        </div>
+        <svg class="icon icon-sm" style="color: var(--text-tertiary-38);" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`;
+    });
+    sub += `</div>`;
+    body.innerHTML = sub;
+  } else if (node.songs.length > 0) {
+    const holder2 = document.createElement("div");
+    body.appendChild(holder2);
+    renderSongsCatalog(applyCurrentSort(node.songs), "No tracks in this folder", holder2);
+  } else {
+    body.innerHTML = `<div style="padding: 30px; text-align: center; color: var(--text-tertiary); font-size: 12px;">Empty folder</div>`;
+  }
+
+  const pa = target.querySelector(".folder-play-all");
+  const ps = target.querySelector(".folder-play-shuffle");
+  if (pa) pa.onclick = () => playFolderScope(scope.rootUri, scope.relPath, false);
+  if (ps) ps.onclick = () => playFolderScope(scope.rootUri, scope.relPath, true);
+}
+
+function findTreeNode(node, relPath) {
+  if (node.relPath === relPath) return node;
+  for (const ch of node.children) {
+    const found = findTreeNode(ch, relPath);
+    if (found) return found;
+  }
+  return null;
+}
+
+function flattenFolderNode(node) {
+  return [...node.songs, ...node.children.flatMap(flattenFolderNode)];
+}
+
+function playFolderScope(uri, relPath, shuffle) {
+  const tree = folderTreeOf(uri);
+  const node = relPath ? findTreeNode(tree, relPath) : tree;
+  if (!node) return;
+  const songs = shuffle ? shuffleArray(flattenFolderNode(node)) : flattenFolderNode(node);
+  if (songs.length === 0) return;
+  state.queue = songs.slice();
+  const idx = state.songs.indexOf(songs[0]);
+  loadTrack(idx, true);
+  displayToast(`Playing ${node.relPath ? dirBaseName(node.relPath) : folderRootByUri(uri)?.name || "folder"} — ${songs.length} tracks`);
+}
+
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function showFolderHowItWorks() {
+  dismissAllSheets();
+  document.getElementById("sheet-mask-how").classList.add("open");
+}
+
+function folderMenuAction(action) {
+  const scope = state.folderScope;
+  if (!scope) return;
+  const isRoot = !scope.relPath;
+  if (action === "play") playFolderScope(scope.rootUri, scope.relPath, false);
+  else if (action === "shuffle") playFolderScope(scope.rootUri, scope.relPath, true);
+  else if (action === "queue") {
+    const tree = folderTreeOf(scope.rootUri);
+    const node = scope.relPath ? findTreeNode(tree, scope.relPath) : tree;
+    const songs = node ? flattenFolderNode(node) : [];
+    if (songs.length) {
+      state.queue.push(...songs);
+      displayToast(`Added ${songs.length} tracks to queue`);
+      renderInPlayerQueue();
+    }
+  } else if (action === "rescan" && isRoot) startFolderScan(scope.rootUri, false);
+  else if (action === "fullrescan" && isRoot) startFolderScan(scope.rootUri, true);
+  else if (action === "remove" && isRoot) confirmRemoveFolder(scope.rootUri);
+  dismissAllSheets();
+}
+
+/* ============================================================ UI: search */
+
+function showSearchSheet() {
+  dismissAllSheets();
+  const mask = document.getElementById("sheet-mask-search");
+  if (!mask) return;
+  mask.classList.add("open");
+  setTimeout(() => {
+    const inp = document.getElementById("search-global-input");
+    if (inp) inp.focus();
+  }, 60);
+  buildSearchResults("");
+}
+
+function buildSearchResults(q) {
+  const holder = document.getElementById("search-global-results");
+  if (!holder) return;
+  q = (q || "").trim().toLowerCase();
+  if (!q) {
+    holder.innerHTML = `<div style="padding: 26px 16px; text-align: center; color: var(--text-tertiary); font-size: 12px;">Type to search your library — songs, albums, artists and folders</div>`;
+    return;
+  }
+  const songs = state.songs.filter(s => !s.virtual && (
+    s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) ||
+    s.album.toLowerCase().includes(q) || (s.genre || "").toLowerCase().includes(q)));
+  const albums = [...new Set(state.songs.filter(s => !s.virtual).map(s => s.album).filter(Boolean))].filter(a => a.toLowerCase().includes(q));
+  const artists = [...new Set(state.songs.map(s => s.artist).filter(Boolean))].filter(a => a.toLowerCase().includes(q));
+  const folders = folderState.roots.map(r => ({ ...r, k: "folder" })).filter(r => r.name.toLowerCase().includes(q));
+  const folderS = folderSongs().filter(s => (s.folderPath || "").toLowerCase().includes(q) && s.artist.toLowerCase().includes(q) === false && !s.album.toLowerCase().includes(q)); // files in matching folders
+
+  let html = "";
+  if (songs.length === 0 && albums.length === 0 && artists.length === 0 && folders.length === 0) {
+    html = `<div style="padding: 26px 16px; text-align: center; color: var(--text-tertiary); font-size: 12px;">No matches for “${escHtml(q)}”</div>`;
+  }
+  if (songs.length) {
+    html += `<div class="search-group-label">SONGS (${songs.length})</div>`;
+    html += songs.slice(0, 30).map(s => `
+      <div class="search-result-row" onclick="playSongFromSearch(${state.songs.indexOf(s)})">
+        <div class="folder-row-ico"><img src="${escAttr(s.artwork || "artwork/default.png")}" alt=""></div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size: 13px; font-weight: 600; overflow:hidden; text-overflow: ellipsis; white-space:nowrap;">${escHtml(s.title)}</div>
+          <div style="font-size: 11px; color: var(--text-tertiary); overflow:hidden; text-overflow: ellipsis; white-space:nowrap;">${escHtml(s.artist)} • ${escHtml(s.album)}</div>
+        </div>
+      </div>`).join("");
+  }
+  if (albums.length) {
+    html += `<div class="search-group-label">ALBUMS</div>`;
+    html += albums.slice(0, 8).map(a => `
+      <div class="search-result-row" onclick="playAlbumSearch(${quote(a)})">
+        <div class="folder-row-ico"><svg class="icon icon-md" viewBox="0 0 24 24"><path d="M3 3h18v18H3z" rx="2"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/></svg></div>
+        <div style="flex:1; min-width:0;"><div style="font-size: 13px; font-weight: 600; overflow:hidden; text-overflow: ellipsis; white-space:nowrap;">${escHtml(a)}</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">Album</div></div>
+      </div>`).join("");
+  }
+  if (artists.length) {
+    html += `<div class="search-group-label">ARTISTS</div>`;
+    html += artists.slice(0, 8).map(a => `
+      <div class="search-result-row" onclick="playArtistSearch(${quote(a)})">
+        <div class="folder-row-ico" style="border-radius: 50%;"><svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg></div>
+        <div style="flex:1; min-width:0;"><div style="font-size: 13px; font-weight: 600; overflow:hidden; text-overflow: ellipsis; white-space:nowrap;">${escHtml(a)}</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">Artist</div></div>
+      </div>`).join("");
+  }
+  if (folders.length) {
+    html += `<div class="search-group-label">FOLDERS</div>`;
+    html += folders.map(r => `
+      <div class="search-result-row" onclick="dismissAllSheets(); selectLibraryTab('folders'); openFolderScope('${escJs(r.uri)}', '');">
+        <div class="folder-row-ico"><svg class="icon icon-md" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+        <div style="flex:1; min-width:0;"><div style="font-size: 13px; font-weight: 600;">${escHtml(r.name)}</div>
+        <div style="font-size: 11px; color: var(--text-tertiary);">${folderSongCount(r.uri)} tracks</div></div>
+      </div>`).join("");
+  }
+  holder.innerHTML = html;
+}
+
+function playSongFromSearch(idx) {
+  dismissAllSheets();
+  loadTrack(idx, true);
+}
+function playAlbumSearch(album) {
+  const songs = state.songs.filter(s => !s.virtual && s.album === album);
+  if (!songs.length) return;
+  state.queue = songs.slice();
+  dismissAllSheets();
+  loadTrack(state.songs.indexOf(songs[0]), true);
+}
+function playArtistSearch(artist) {
+  const songs = state.songs.filter(s => s.artist === artist);
+  if (!songs.length) return;
+  state.queue = songs.slice();
+  dismissAllSheets();
+  loadTrack(state.songs.indexOf(songs[0]), true);
+}
+
+/* ---------------------------------------------------------- menu (nav) */
+
+function showMenuSheet() {
+  dismissAllSheets();
+  renderMusicFoldersSettings();
+  syncPlaybackSettingsUI();
+  document.getElementById("sheet-mask-settings").classList.add("open");
+}
+
+/* ------------------------------------------------------- small helpers */
+
+function escJs(s) { return String(s).replace(/\\/g, "\\\\").replace(/'/g, "\\'"); }
+function quote(s) { return "'" + escJs(s) + "'"; }
+function escAttr(s) { return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+function folderFullRescanAll() {
+  folderState.roots.forEach(r => startFolderScan(r.uri, true));
+  displayToast("Full rescan started");
+}
+
+/* --------------------------------------------------- cover gestures (NP) */
+
+function attachCoverGestures() {
+  const box = document.querySelector(".artwork-frame-box");
+  if (!box || box.dataset.gestures) return;
+  box.dataset.gestures = "1";
+  let sx = 0, sy = 0, active = false;
+  box.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; active = true;
+  }, { passive: true });
+  box.addEventListener("touchmove", e => {
+    if (active && Math.abs(e.touches[0].clientX - sx) > 24) {
+      // prevent page scroll while the horizontal gesture is engaged
+      e.preventDefault();
+    }
+  }, { passive: false });
+  box.addEventListener("touchend", e => {
+    if (!active) return;
+    active = false;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) > 64 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+      if (dx < 0) executePlayNext(); else executePlayPrevious();
+    } else if (dy < -64 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+      switchPlayerStage("lyrics");
+    } else if (dy > 64 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+      collapseNowPlayingScreen();
+    }
+  }, { passive: true });
+}
+
 function playFolderTracks(folderPath, shuffle) {
   const folders = buildFolderIndex();
   const list = (folders[folderPath] || []).map(e => e.song).sort(sortComparator(state.sortKey));
@@ -6050,6 +7192,7 @@ function showEqualizerSheet() {
 
 function showSettingsSheet() {
   dismissAllSheets();
+  renderMusicFoldersSettings();
   syncPlaybackSettingsUI();
   document.getElementById("sheet-mask-settings").classList.add("open");
 }
