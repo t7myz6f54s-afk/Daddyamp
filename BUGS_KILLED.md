@@ -249,3 +249,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Initial catalog mount now uses smaller dynamic chunks on 1k/3k+ libraries plus DocumentFragment batching.
 - 10k-track smoke verified multiple genre buckets, 64-row initial mount, large-library smoothness class, and ~1 ms cached portal open.
 - Rebuilt signed APK as versionCode 31 / versionName 1.30.
+
+## v1.31 — background bleed fix + stronger genre intelligence
+
+- Fixed Library Home/player background bleed by making the portal/full player opaque and preventing drag opacity from revealing the library behind it.
+- Added famous-artist genre hints, including Britney Spears -> Pop, before keyword fallback.
+- Expanded local deterministic genre inference for pop, rap, R&B, Bollywood, qawwali, rock, metal, electronic, jazz, classical, soundtrack, reggae, country, and more.
+- Retested a 10,000-track Britney/Local Device case: Genres classified all 10,000 as Pop with 0 Unsorted.
+- Reduced large-library jank further by disabling heavy mini-player blur/reflection, ambient glow, and expensive shadows in large-library mode.
+- Kept genre inference local and deterministic; no files are uploaded and no external classifier is called.
+- Rebuilt signed APK as versionCode 32 / versionName 1.31.

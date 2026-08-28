@@ -206,3 +206,14 @@ Implemented a major bug-kill/performance pass based on the user's feedback:
 - Huge libraries now get a large-library smoothness mode: row/card entrance animations are disabled after 1200 tracks.
 - Initial row mount was reduced dynamically for large libraries and now uses DocumentFragment batching to cut layout churn.
 - 10k-track smoke: initial mounted rows reduced to 64, large-library class enabled, portal open stayed ~1 ms, and smart genre view produced multiple useful genres.
+
+## v1.31 honesty/performance pass — background bleed fix + stronger genre intelligence
+
+Implemented another bug-kill pass based on direct user feedback:
+- Fixed swipe portal/player background bleed by making the Library Home portal and full player use opaque base backgrounds, and by stopping portal drag from fading transparent over the library.
+- Added a much stronger local artist-to-genre hint table for famous artists and common libraries, including Britney Spears -> Pop.
+- Smart genre inference now checks artist identity before keyword fallback, so well-known artists are classified even when title/album/path are generic and metadata says Local Device/Device Audio.
+- Added broader rules for Pop, Hip-Hop/Rap, R&B/Soul, Bollywood, Qawwali, Rock, Metal, Electronic, Jazz, Classical, Soundtrack, Reggae, Country, etc.
+- Retested the reported Britney-style case with 10,000 Local Device tracks: all 10,000 were classified as Pop, 0 remained Unsorted.
+- Added more large-library jank reduction: disable heavy mini-player blur/artwork reflection and ambient glow in large-library mode; lighter shadows; portal remains opacity 1 while swiping.
+- Kept deterministic local inference only; no online upload, no network classification, no fake AI claims.

@@ -2039,7 +2039,7 @@ body, html { background: var(--void); }
 
 /* ---- Player: art-driven hero, glass deck, scrim ---- */
 #full-player-screen {
-  background: transparent;
+  background: var(--bg-abyss);
 }
 #full-player-screen::after {
   content: "";
@@ -2704,6 +2704,25 @@ html.large-library .song-catalog-row {
   transition: background 80ms linear;
 }
 
+html.large-library #docked-mini-player,
+html.large-library .portal-mini-return,
+html.large-library .sheet-content-dialog {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.large-library #docked-mini-player::before,
+html.large-library .player-ambient-glow {
+  display: none !important;
+}
+html.large-library .portal-category-card,
+html.large-library .song-catalog-row,
+html.large-library .album-unit-box {
+  box-shadow: none !important;
+}
+html.large-library #library-category-portal {
+  box-shadow: none;
+}
+
 /* v1.28 Library Home portal — Poweramp-like category surface */
 #library-category-portal {
   position: fixed;
@@ -2711,7 +2730,7 @@ html.large-library .song-catalog-row {
   z-index: 72;
   background:
     radial-gradient(90% 70% at 10% 0%, var(--accent-ambient), transparent 58%),
-    linear-gradient(180deg, rgba(6,7,9,0.96), rgba(10,12,17,0.985));
+    linear-gradient(180deg, #060709, #090C11);
   transform: translate3d(104%, 0, 0);
   opacity: 0.001;
   pointer-events: none;
@@ -6065,6 +6084,19 @@ const GENRE_ALIASES = {
   "lofi": "Lo-Fi", "lo-fi": "Lo-Fi", "ambient": "Ambient", "chill": "Chill", "sleep": "Ambient",
   "podcast": "Podcast", "audiobook": "Audiobook", "lecture": "Lecture", "quran": "Quran", "tilawat": "Quran"
 };
+
+const ARTIST_GENRE_HINTS = {
+  "britney spears": "Pop", "madonna": "Pop", "michael jackson": "Pop", "janet jackson": "Pop", "lady gaga": "Pop", "katy perry": "Pop", "rihanna": "Pop", "beyonce": "Pop", "adele": "Pop", "ariana grande": "Pop", "dua lipa": "Pop", "taylor swift": "Pop", "ed sheeran": "Pop", "justin bieber": "Pop", "selena gomez": "Pop", "billie eilish": "Pop", "miley cyrus": "Pop", "bruno mars": "Pop", "shakira": "Pop", "justin timberlake": "Pop", "backstreet boys": "Pop", "nsync": "Pop", "one direction": "Pop", "maroon 5": "Pop", "coldplay": "Alternative", "imagine dragons": "Alternative",
+  "eminem": "Hip-Hop/Rap", "drake": "Hip-Hop/Rap", "kendrick lamar": "Hip-Hop/Rap", "kanye west": "Hip-Hop/Rap", "jay z": "Hip-Hop/Rap", "jay-z": "Hip-Hop/Rap", "tupac": "Hip-Hop/Rap", "2pac": "Hip-Hop/Rap", "nas": "Hip-Hop/Rap", "snoop dogg": "Hip-Hop/Rap", "travis scott": "Hip-Hop/Rap", "post malone": "Hip-Hop/Rap", "cardi b": "Hip-Hop/Rap", "nicki minaj": "Hip-Hop/Rap", "young stunners": "Hip-Hop/Rap", "talha anjum": "Hip-Hop/Rap", "talhah yunus": "Hip-Hop/Rap",
+  "the weeknd": "R&B/Soul", "usher": "R&B/Soul", "alicia keys": "R&B/Soul", "frank ocean": "R&B/Soul", "sza": "R&B/Soul", "chris brown": "R&B/Soul",
+  "arijit singh": "Bollywood", "atif aslam": "Bollywood", "rahat fateh ali khan": "Qawwali", "nusrat fateh ali khan": "Qawwali", "sonu nigam": "Bollywood", "udit narayan": "Bollywood", "alka yagnik": "Bollywood", "shreya ghoshal": "Bollywood", "jubin nautiyal": "Bollywood", "pritam": "Bollywood", "a r rahman": "Soundtrack", "a.r. rahman": "Soundtrack",
+  "linkin park": "Rock", "nirvana": "Rock", "queen": "Rock", "metallica": "Metal", "ac/dc": "Rock", "guns n roses": "Rock", "pink floyd": "Rock", "the beatles": "Rock", "radiohead": "Alternative", "green day": "Punk", "slipknot": "Metal",
+  "david guetta": "Electronic", "calvin harris": "Electronic", "avicii": "Electronic", "martin garrix": "Electronic", "skrillex": "Electronic", "daft punk": "Electronic", "marshmello": "Electronic", "alan walker": "Electronic", "tiesto": "Electronic", "armin van buuren": "Electronic",
+  "miles davis": "Jazz", "john coltrane": "Jazz", "louis armstrong": "Jazz", "ella fitzgerald": "Jazz", "nina simone": "Jazz", "bb king": "Blues", "b.b. king": "Blues",
+  "mozart": "Classical", "beethoven": "Classical", "bach": "Classical", "chopin": "Classical", "tchaikovsky": "Classical", "vivaldi": "Classical", "hans zimmer": "Soundtrack", "john williams": "Soundtrack",
+  "bob marley": "Reggae", "johnny cash": "Country", "dolly parton": "Country", "the chainsmokers": "Electronic"
+};
+
 const GENRE_RULES = [
   ["Quran", ["quran", "tilawat", "recitation", "surah", "ayat", "mishary", "sudais", "abdul basit"]],
   ["Naat", ["naat", "hamd", "milad", "salam", "madina", "mustafa", "rasool"]],
@@ -6100,11 +6132,21 @@ function normalizeGenreTag(raw) {
   return first.replace(/\b\w/g, c => c.toUpperCase()).replace(/\bAnd\b/g, "and");
 }
 function inferGenreFromSong(song) {
-  const text = [song.title, song.artist, song.album, song.genre, song.folderPath, song.docName, song.filePath, song.path]
-    .filter(Boolean).join(" ").toLowerCase().replace(/[_\-.]+/g, " ");
+  const artistKey = String(song?.artist || "").toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ").trim();
+  if (artistKey && ARTIST_GENRE_HINTS[artistKey]) return ARTIST_GENRE_HINTS[artistKey];
+  for (const [artist, genre] of Object.entries(ARTIST_GENRE_HINTS)) {
+    if (artistKey && (artistKey.includes(artist) || artist.includes(artistKey))) return genre;
+  }
+  const text = [song?.title, song?.artist, song?.album, song?.genreRaw || song?.genre, song?.folderPath, song?.docName, song?.filePath, song?.path]
+    .filter(Boolean).join(" ").toLowerCase().replace(/[_\-.]+/g, " ").replace(/\s+/g, " ");
   for (const [genre, keys] of GENRE_RULES) {
     if (keys.some(k => text.includes(k))) return genre;
   }
+  // Last-resort pattern pass for common library naming schemes.
+  if (/\b(pop|top 40|billboard|hits|dance pop)\b/.test(text)) return "Pop";
+  if (/\b(remix|club mix|dj mix|edm|house|techno|trance)\b/.test(text)) return "Electronic";
+  if (/\b(rock|guitar solo|band)\b/.test(text)) return "Rock";
+  if (/\b(rap|hip hop|freestyle|mixtape)\b/.test(text)) return "Hip-Hop/Rap";
   return "Unsorted";
 }
 function smartGenreOf(song) {
@@ -6254,6 +6296,7 @@ function renderLibraryPortal(force = false) {
 }
 
 function updatePortalCountsOnly() {
+  if (!window.document || !document.getElementById("portal-category-grid")) return;
   const cards = buildPortalCategories();
   cards.forEach(c => {
     const count = document.querySelector(`[data-portal-count="${c.key}"]`);
@@ -6338,7 +6381,7 @@ function attachLibrarySwipePortal() {
       portal.classList.add("dragging");
       portal.setAttribute("aria-hidden", "false");
       portal.style.transform = `translate3d(${x}%, 0, 0)`;
-      portal.style.opacity = String(Math.max(0.25, progress));
+      portal.style.opacity = "1";
     }
   };
   sc.addEventListener("touchstart", e => {
@@ -6407,7 +6450,7 @@ function portalSwipeMove(e) {
     if (portal) {
       portal.classList.add("dragging");
       portal.style.transform = `translate3d(${x}px, 0, 0)`;
-      portal.style.opacity = String(Math.max(0.45, 1 - x / 260));
+      portal.style.opacity = "1";
     }
   }
 }
