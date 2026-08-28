@@ -631,3 +631,15 @@ at /home/user/android-sdk (build-tools/34.0.0 + platforms/android-34).
 - Commit a88e0a8 on main (parent 3490acb v1.11). Raw URL serves v1.12.
 - Open: on-device 2000-track perf, native art thumbnail cache, keystore public/private call,
   token rotation. FEATURE_LOCK.md is the contract going forward.
+
+---
+## v1.13 status (2026-08-28) — shipped, P0 false-error + frozen wavebar killed
+- Verified-error engine: per-playGen verdict; stale MediaPlayer onError (reset/prepare races)
+  never toasts or stops UI; honest "Can't play" only when nothing audible + load never
+  prepared. Web error listener + play() rejection + sync failure all routed; empty-play
+  guard; error saves paused session. Suite: /home/user/smoke/smoke.mjs → 163/163.
+- APK v1.13 (versionCode 14), commit c9deeff on main. Raw URL may serve cached v1.12 for a
+  while; commit-pinned URL https://github.com/t7myz6f54s-afk/Daddyamp/raw/c9deeff/DaddyAmp.apk
+  is immediate. Re-verify raw main URL serves v1.13 before next ship.
+- Next candidates: on-device 2000-track perf, native art thumbnail cache, keystore public/
+  private call.

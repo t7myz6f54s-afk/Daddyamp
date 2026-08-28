@@ -127,3 +127,17 @@ PASS, N/A (never claimed in the UI — nothing fake to remove), or explicitly no
 ### What was deliberately NOT changed (lock)
 Folder model, native scanner, audio engine (single MediaPlayer), lyrics atmosphere layers,
 waveseek gestures, 4-tab nav, mini-player-above-nav layout, schema.
+
+## v1.13 audit — NO BUGS pass (false can't-play + frozen wavebar killed)
+
+- USER-REPORTED P0 fixed: verified-error engine (per-playGen verdict, 650ms settle, dedup,
+  audible-check via raw MediaPlayer isPlaying(), prepared-wins, honest toast only when truly
+  dead). Pause/unpause is NEVER required. 16 new suite checks; 163/163 total.
+- Web path: audioEl error listener added; play() rejections + sync playAudio()===false routed
+  to verifier; empty-play guard; verified error saves paused session.
+- §3 sweep all pass (tap identity 2 + 150 songs, rapid-tap last-wins, repeat/shuffle
+  identity, no scan banner residue, folders persist, lyrics atmosphere layer intact).
+- UI polish already v1.12 (OLED, art-blur, desaturated accent, glass nav, mini, 8px rhythm,
+  44px, play 1.35x, tokens 90/180/380/420/600) — no rework needed; wavebar alive-state fixed
+  by the P0, not new styling.
+- Locks honored: no feature additions, no new import flows, no tab changes.
