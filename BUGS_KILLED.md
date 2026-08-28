@@ -332,3 +332,21 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Kept the restored waveform active in Auto performance mode and verified the waveform draw path still executes after recovering from old bad Line/Speed/off-palette settings.
 - Rechecked large-library fluidity: 10k-track smoke kept Auto performance on, Speed off, Wave restored, Dynamic Artwork Palette restored, portal open 0 ms, first track rows 64, and no JS errors.
 - Rebuilt signed APK as versionCode 39 / versionName 1.38.
+
+## v1.39 — UI/Motion polish pass
+
+- Added a sliding underline indicator to the Library tab strip. Counts are lighter, separated from labels, and the active state now moves instead of hard color-swapping.
+- Song rows now have larger 12px vertical padding, clean ellipsis behavior, and tactile press feedback with scale/opacity response.
+- Album/row/mini/player thumbnails use consistent square cropping, 8px rounding, and shimmer skeleton placeholders while art loads.
+- Bottom nav now uses a unified outline Search icon and animated icon/label scale/color transitions.
+- Mini-player progress is now a visible 3px glowing accent line driven by transform for smoother updates.
+- Mini-player swipe-up now springs back/expands with a longer physical curve and haptic feedback; existing left/right skip gestures remain.
+- Full-player ambient background now breathes/drifts slowly on a 9.5s loop, keeping the restored album-colour atmosphere alive.
+- Track-change art animation now scales in from 0.90 with a slight overshoot instead of hard-cutting.
+- Art/Lyrics/Queue/Specs/Viz tabs now use a sliding/morphing pill indicator instead of a static active background.
+- Waveform handle now has a soft accent glow, and bars near the playhead get a subtle pulse while playing.
+- Transport/buttons/cards gained consistent press/ripple feedback; skip buttons get directional slide-bounce.
+- Volume slider thumb now matches the waveform handle with accent glow on drag.
+- Added motion-polish JS helpers for tab/pill indicators, bottom-nav active animation, thumbnail load states, and global tactile tap feedback.
+- Revalidated 10k-track visual recovery: Wave restored, Dynamic Artwork Palette restored, Auto mode restored from old bad settings, waveform draw path and handle glow executed, subnav/stage indicators mounted, metadata escaped, 64 initial rows, 0 JS errors.
+- Rebuilt signed APK as versionCode 40 / versionName 1.39.

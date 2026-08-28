@@ -283,3 +283,13 @@ Continued the smooth/fluid push without deleting signature visuals:
 - Android WebView is now explicitly hardware-composited, de-scrolled, and configured for stable local-app rendering.
 - Album-colour feel no longer waits for image decode; DaddyAmp applies an immediate per-song mood tint, then refines it from the cover palette.
 - Waveform and adaptive colour remain protected defaults after upgrade recovery.
+
+## v1.39 UI/Motion polish pass
+
+Implemented the requested visual-only polish layer:
+- Library tabs now feel physical with a sliding underline and lighter count typography.
+- Rows/cards/buttons/navigation all gained consistent scale/opacity/ripple press states.
+- Thumbnails gained consistent square crops and shimmer placeholders.
+- Mini-player progress is thicker, glowing, and transform-driven; mini gestures keep Poweramp-style skip/expand behavior with springier recovery.
+- Full-player atmosphere breathes, album art enters from 0.90 scale, stage tabs use a sliding morph pill, waveform gets handle glow and playhead pulse, and volume thumb styling now matches the waveform handle.
+- The pass intentionally preserves functionality and the restored signature visuals: Wave seekbar + adaptive album colours stay on by default.

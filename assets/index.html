@@ -3074,6 +3074,136 @@ html.mini-has-context .mini-context-chip { display: inline; }
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
 
+
+
+/* =========================================================================
+   v1.39 UI/MOTION POLISH PASS — tactile, springy, Poweramp-like
+   ========================================================================= */
+#library-subnav-bar { position: relative; gap: 10px; padding: 0 14px; }
+.subnav-tab-item {
+  position: relative;
+  padding: 8px 12px 9px;
+  gap: 14px;
+  border-radius: 12px;
+  transition: color 160ms var(--ease-out), transform 150ms var(--ease-out), opacity 150ms var(--ease-out), background-color 150ms var(--ease-out);
+}
+.subnav-tab-item.active { background: transparent; color: var(--text-pure); }
+.subnav-tab-item:active { transform: scale(0.98); opacity: 0.72; }
+.subnav-count-tag { font-size: 9px; font-weight: 600; opacity: 0.60; margin-left: 2px; }
+.subnav-active-underline {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2.5px;
+  width: 28px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 14px var(--accent-glow);
+  transform: translate3d(var(--tab-x, 14px), 0, 0) scaleX(var(--tab-w, 1));
+  transform-origin: left center;
+  transition: transform 170ms cubic-bezier(0.16, 1, 0.3, 1), background-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+  pointer-events: none;
+}
+.song-catalog-row {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  transform-origin: center;
+  transition: transform 120ms cubic-bezier(.2,.9,.2,1), opacity 120ms var(--ease-out), background-color 130ms var(--ease-out), border-color 180ms var(--ease-out);
+}
+.song-catalog-row:active { transform: scale(0.98); opacity: 0.70; }
+.row-details-line, .mini-title-line, .mini-artist-line, .mini-kicker-row, .album-title-text, .album-artist-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+.row-details-line span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-artwork-frame, .mini-cover-shell, .album-thumb-container, .drilldown-art-box, .queue-stage-art {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+}
+.row-artwork-frame::before, .mini-cover-shell::before, .album-thumb-container::before, .drilldown-art-box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, rgba(255,255,255,0.035), rgba(255,255,255,0.13), rgba(255,255,255,0.035));
+  transform: translateX(-115%);
+  animation: artSkeletonShimmer 1.25s var(--ease-out) infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+.row-artwork-frame.art-loaded::before, .mini-cover-shell.art-loaded::before, .album-thumb-container.art-loaded::before, .drilldown-art-box.art-loaded::before { display: none; }
+.row-artwork-img, .mini-cover-thumb, .album-thumb-image, .drilldown-art-box img, .queue-stage-art { aspect-ratio: 1 / 1; object-fit: cover; border-radius: inherit; }
+@keyframes artSkeletonShimmer { to { transform: translateX(115%); } }
+#mini-progress-line {
+  top: -2px;
+  height: 3px;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 90ms linear, background-color 180ms var(--ease-out), box-shadow 180ms var(--ease-out);
+  border-radius: 0 999px 999px 0;
+}
+#docked-mini-player {
+  transition: transform 260ms cubic-bezier(0.18, 1.25, 0.32, 1), opacity 160ms var(--ease-out), background-color 220ms var(--ease-out), box-shadow 220ms var(--ease-out);
+}
+#docked-mini-player:active { transform: scale(0.995); }
+.nav-bottom-tab { transition: color 180ms var(--ease-out), transform 180ms cubic-bezier(.2,1.2,.2,1), opacity 160ms var(--ease-out); }
+.nav-bottom-tab svg, .nav-bottom-tab span { transition: transform 180ms cubic-bezier(.2,1.2,.2,1), color 180ms var(--ease-out), opacity 180ms var(--ease-out); }
+.nav-bottom-tab.active svg { transform: translateY(-1px) scale(1.08); filter: drop-shadow(0 0 7px var(--accent-glow)); }
+.nav-bottom-tab.active span { transform: scale(1.04); }
+.nav-bottom-tab:active { transform: scale(0.94); opacity: 0.72; }
+.player-ambient-layer { animation: ambientDrift 9.5s ease-in-out infinite alternate; transform-origin: 50% 15%; }
+@keyframes ambientDrift { from { transform: scale(1.00) translate3d(0,0,0); filter: saturate(1); } to { transform: scale(1.035) translate3d(0,-8px,0); filter: saturate(1.16); } }
+@keyframes artMorphIn { from { transform: scale(0.90); opacity: 0.25; } 62% { transform: scale(1.018); opacity: 1; } to { transform: scale(1); opacity: 1; } }
+.stage-switcher-bar { position: relative; isolation: isolate; }
+.stage-pill-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: 48px;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  box-shadow: 0 0 18px var(--accent-glow);
+  transform: translate3d(var(--pill-x, 3px), 0, 0);
+  transition: transform 250ms cubic-bezier(0.18, 1.25, 0.32, 1), width 250ms cubic-bezier(0.18, 1.25, 0.32, 1), background-color 220ms var(--ease-out);
+  z-index: 0;
+  pointer-events: none;
+}
+.stage-pill-btn { position: relative; z-index: 1; transition: color 170ms var(--ease-out), transform 140ms var(--ease-out), opacity 140ms var(--ease-out); }
+.stage-pill-btn.active { background: transparent; color: #060709; }
+.stage-pill-btn:active { transform: scale(0.94); opacity: 0.78; }
+.transport-btn-round, .btn-action-tap, .btn-import-header, .mini-master-play-btn, .btn-inline-heart, .album-unit-box {
+  transition: transform 130ms cubic-bezier(.2,1.25,.2,1), opacity 130ms var(--ease-out), background-color 170ms var(--ease-out), color 170ms var(--ease-out), box-shadow 170ms var(--ease-out);
+}
+.transport-btn-round:active, .btn-action-tap:active, .btn-import-header:active, .mini-master-play-btn:active, .btn-inline-heart:active, .album-unit-box:active { transform: scale(0.92); opacity: 0.74; }
+.tap-ripple { position: relative; overflow: hidden; }
+.tap-ripple::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(255,255,255,0.20), transparent 62%);
+  opacity: 0;
+  animation: rippleFlash 360ms var(--ease-out);
+  pointer-events: none;
+}
+@keyframes rippleFlash { 0% { opacity: .38; transform: scale(.72); } 100% { opacity: 0; transform: scale(1.25); } }
+.transport-slide-left { animation: transportSlideLeft 180ms cubic-bezier(.2,1.25,.2,1); }
+.transport-slide-right { animation: transportSlideRight 180ms cubic-bezier(.2,1.25,.2,1); }
+@keyframes transportSlideLeft { 45% { transform: translateX(-5px) scale(.92); } 100% { transform: none; } }
+@keyframes transportSlideRight { 45% { transform: translateX(5px) scale(.92); } 100% { transform: none; } }
+#poweramp-canvas-scrubber { filter: drop-shadow(0 0 9px var(--accent-glow)); }
+.slider-vol-bar { accent-color: var(--accent); }
+.slider-vol-bar::-webkit-slider-thumb { box-shadow: 0 0 0 5px rgba(255,255,255,0.08), 0 0 14px var(--accent-glow); transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out); }
+.slider-vol-bar:active::-webkit-slider-thumb { transform: scale(1.18); box-shadow: 0 0 0 8px rgba(255,255,255,0.12), 0 0 18px var(--accent-glow); }
+@media (prefers-reduced-motion: reduce) {
+  .player-ambient-layer, .row-artwork-frame::before, .mini-cover-shell::before, .album-thumb-container::before, .drilldown-art-box::before { animation: none !important; }
+}
+
 </style>
 </head>
 <body>
@@ -3290,7 +3420,7 @@ html.mini-has-context .mini-context-chip { display: inline; }
       <span>Library</span>
     </button>
     <button class="nav-bottom-tab" id="bnav-tab-search" onclick="showSearchSheet()">
-      <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/></svg>
+      <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.5" y2="16.5"/></svg>
       <span>Search</span>
     </button>
     <button class="nav-bottom-tab" id="bnav-tab-equalizer" onclick="showEqualizerSheet()">
@@ -4164,7 +4294,7 @@ let state = {
     autoQueue: true,
     replayLeveling: true,
     performanceMode: "auto",
-    visualRecoveryVersion: 0,
+    visualRecoveryVersion: 139,
     listTapOpenPlayer: false,
     listDensity: "comfort",
     tempo: 1.0,
@@ -4243,7 +4373,7 @@ window.addEventListener("unhandledrejection", e => { if (bootGuardActive) report
 window.addEventListener("DOMContentLoaded", () => {
   try {
   setupCanvas();
-  window.addEventListener("resize", setupCanvas);
+  window.addEventListener("resize", () => { setupCanvas(); updateSubnavIndicator(); updateStagePillIndicator(); });
 
   loadPersistedData();
   refreshBadges();
@@ -4261,6 +4391,9 @@ window.addEventListener("DOMContentLoaded", () => {
   attachLibrarySwipePortal();
   armTransportHoldMenus();
   armArtFallback();
+  armMotionPolish();
+  updateSubnavIndicator();
+  updateStagePillIndicator();
 
   setInterval(syncPlaybackPosition, 250);
 
@@ -4445,11 +4578,11 @@ function recoverSignatureVisualDefaults() {
   // v1.32-v1.33 over-optimized and made the app look stripped on some installs.
   // On upgrade, restore DaddyAmp's signature visuals once: wavebar + adaptive album colour.
   const seen = Number(state.settings.visualRecoveryVersion || 0);
-  if (seen >= 136) return;
+  if (seen >= 139) return;
   state.settings.seekStyle = "wave";
   state.settings.dynamicTheme = true;
   if (state.settings.performanceMode === "speed") state.settings.performanceMode = "auto";
-  state.settings.visualRecoveryVersion = 136;
+  state.settings.visualRecoveryVersion = 139;
 }
 
 function applyPersistedSettings() {
@@ -4593,7 +4726,9 @@ function drawPowerampScrubber(forceRedraw = false) {
     const x = left + i * (barWidth + gap);
     if (x > right) break;
     const heightRatio = peaks[i] || 0.45;
-    const barHeight = Math.max(5, (height - 6) * heightRatio);
+    const near = Math.max(0, 1 - Math.abs(i - currentBarIdx) / 4);
+    const pulse = state.isPlaying ? (1 + near * 0.16 * (0.5 + 0.5 * Math.sin(Date.now() / 120 + i))) : 1;
+    const barHeight = Math.max(5, (height - 6) * heightRatio * pulse);
     const y = centerY - barHeight / 2.0;
     appendRoundedRectPath(ctx, x, y, barWidth, barHeight, 1);
   }
@@ -4607,7 +4742,9 @@ function drawPowerampScrubber(forceRedraw = false) {
     const x = left + i * (barWidth + gap);
     if (x > right) break;
     const heightRatio = peaks[i] || 0.45;
-    const barHeight = Math.max(5, (height - 6) * heightRatio);
+    const near = Math.max(0, 1 - Math.abs(i - currentBarIdx) / 4);
+    const pulse = state.isPlaying ? (1 + near * 0.16 * (0.5 + 0.5 * Math.sin(Date.now() / 120 + i))) : 1;
+    const barHeight = Math.max(5, (height - 6) * heightRatio * pulse);
     const y = centerY - barHeight / 2.0;
     appendRoundedRectPath(ctx, x, y, barWidth, barHeight, 1);
   }
@@ -4622,9 +4759,13 @@ function drawPowerampScrubber(forceRedraw = false) {
     const markerH = Math.min(height - 2, 26);
     const markerY = centerY - markerH / 2.0;
     appendRoundedRectPath(ctx, markerX - markerW / 2.0, markerY, markerW, markerH, 1.8);
+    ctx.save();
+    ctx.shadowColor = state.palette.accent || "#FFFFFF";
+    ctx.shadowBlur = 14;
     ctx.fillStyle = "#FFFFFF";
     ctx.globalAlpha = 1.0;
     ctx.fill();
+    ctx.restore();
   }
 
   // Draw track marker dots
@@ -4991,6 +5132,7 @@ function updatePlayButtonVisuals(playing) {
     btn.classList.toggle("is-playing", !!playing);
   });
   document.documentElement.classList.toggle("is-breathing", !!playing && !state.settings.reduceMotion);
+  if (playing) startSmoothMiniProgress(); else stopSmoothMiniProgress();
   updateMiniDeckMeta();
   if (typeof updateActivePlayingRowInDOM === "function") updateActivePlayingRowInDOM();
 }
@@ -5323,11 +5465,27 @@ function syncPlaybackPosition() {
   }
 }
 
+let miniProgressRaf = 0;
 function updateMiniProgressBar() {
   const bar = document.getElementById("mini-progress-line");
-  const pct = Math.max(0, Math.min(100, (state.currentTime / (state.duration || 1)) * 100));
-  if (bar) bar.style.width = `${pct}%`;
+  const pct = Math.max(0, Math.min(1, (state.currentTime / (state.duration || 1))));
+  if (bar) bar.style.transform = `scaleX(${pct})`;
   updateMiniDeckMeta();
+}
+function startSmoothMiniProgress() {
+  if (miniProgressRaf) return;
+  const loop = () => {
+    miniProgressRaf = 0;
+    if (!state.isPlaying) return;
+    updateMiniProgressBar();
+    miniProgressRaf = requestAnimationFrame(loop);
+  };
+  miniProgressRaf = requestAnimationFrame(loop);
+}
+function stopSmoothMiniProgress() {
+  if (miniProgressRaf) cancelAnimationFrame(miniProgressRaf);
+  miniProgressRaf = 0;
+  updateMiniProgressBar();
 }
 
 function updateMiniDeckMeta() {
@@ -6192,6 +6350,7 @@ function switchPlayerStage(mode) {
   document.querySelectorAll(".stage-pill-btn").forEach(b => b.classList.remove("active"));
   const btn = document.getElementById(`btn-stage-${mode}`);
   if (btn) btn.classList.add("active");
+  requestAnimationFrame(updateStagePillIndicator);
 
   if (mode === "lyrics" && state.activeLyricIdx >= 0) {
     resumeLyricAutoFollow();
@@ -6789,6 +6948,8 @@ function selectLibraryTab(tab) {
   document.querySelectorAll(".subnav-tab-item").forEach(t => t.classList.remove("active"));
   const tabEl = document.getElementById(`tab-btn-${tab}`);
   if (tabEl) tabEl.classList.add("active");
+  updateBottomNavActive("library");
+  requestAnimationFrame(updateSubnavIndicator);
 
   const sortable = (tab === "tracks" || tab === "folders");
   document.getElementById("sort-chip-btn").style.display = sortable ? "inline-flex" : "none";
@@ -8887,6 +9048,11 @@ function folderFullRescanAll() {
 function armArtFallback() {
   if (window.__armArtFallback) return;
   window.__armArtFallback = true;
+  document.addEventListener("load", e => {
+    const t = e.target;
+    if (t && t.tagName === "IMG") t.parentElement?.classList.add("art-loaded");
+  }, true);
+  document.querySelectorAll("img").forEach(img => { if (img.complete) img.parentElement?.classList.add("art-loaded"); });
   document.addEventListener("error", e => {
     const t = e.target;
     if (t && t.tagName === "IMG" && !t.dataset.fb && t.src && !t.src.endsWith("artwork/default.png")) {
@@ -10027,14 +10193,15 @@ function miniSwipeMove(e) {
 function miniSwipeEnd(e) {
   const player = document.getElementById("docked-mini-player");
   if (player) {
-    player.style.transition = "transform 0.18s ease-out";
+    player.style.transition = "transform 300ms cubic-bezier(0.18, 1.25, 0.32, 1)";
     player.style.transform = "";
     player.classList.remove("mini-gesture-category", "mini-gesture-track");
-    setTimeout(() => { player.style.transition = ""; }, 200);
+    setTimeout(() => { player.style.transition = ""; }, 320);
   }
   
   if (miniSwipeTracking) {
     if (miniSwipeAxis === "y" && miniSwipeAccumDelta < -38) {
+      haptic("expand");
       expandNowPlayingScreen();
     } else if (miniSwipeAxis === "y" && miniSwipeAccumDelta > 42) {
       openCurrentPlaybackContext();
@@ -10050,6 +10217,66 @@ function miniSwipeEnd(e) {
   miniSwipeTracking = false;
   miniSwipeAxis = "";
   miniSwipeAccumDelta = 0;
+}
+
+function updateSubnavIndicator() {
+  const bar = document.getElementById("library-subnav-bar");
+  if (!bar) return;
+  let rail = bar.querySelector(".subnav-active-underline");
+  if (!rail) { rail = document.createElement("div"); rail.className = "subnav-active-underline"; bar.appendChild(rail); }
+  const active = bar.querySelector(".subnav-tab-item.active");
+  if (!active) return;
+  const br = bar.getBoundingClientRect();
+  const ar = active.getBoundingClientRect();
+  const x = (ar.left - br.left) + bar.scrollLeft + 8;
+  const w = Math.max(24, ar.width - 16);
+  rail.style.setProperty("--tab-x", x + "px");
+  rail.style.setProperty("--tab-w", String(w / 28));
+}
+function updateStagePillIndicator() {
+  const bar = document.querySelector(".stage-switcher-bar");
+  if (!bar) return;
+  let rail = bar.querySelector(".stage-pill-indicator");
+  if (!rail) { rail = document.createElement("div"); rail.className = "stage-pill-indicator"; bar.prepend(rail); }
+  const active = bar.querySelector(".stage-pill-btn.active");
+  if (!active) return;
+  const br = bar.getBoundingClientRect();
+  const ar = active.getBoundingClientRect();
+  rail.style.setProperty("--pill-x", Math.max(3, ar.left - br.left) + "px");
+  rail.style.width = Math.max(34, ar.width) + "px";
+}
+function updateBottomNavActive(which) {
+  document.querySelectorAll(".nav-bottom-tab").forEach(b => b.classList.remove("active"));
+  const id = which === "search" ? "bnav-tab-search" : which === "eq" ? "bnav-tab-equalizer" : which === "menu" ? "bnav-tab-menu" : "bnav-tab-library";
+  document.getElementById(id)?.classList.add("active");
+}
+function pulseTap(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), 420);
+}
+function armMotionPolish() {
+  if (window.__motionPolishArmed) return;
+  window.__motionPolishArmed = true;
+  document.addEventListener("click", e => {
+    const btn = e.target.closest("button,.song-catalog-row,.album-unit-box");
+    if (btn) pulseTap(btn, "tap-ripple");
+    const nav = e.target.closest(".nav-bottom-tab");
+    if (nav) {
+      if (nav.id === "bnav-tab-search") updateBottomNavActive("search");
+      else if (nav.id === "bnav-tab-equalizer") updateBottomNavActive("eq");
+      else if (nav.id === "bnav-tab-menu") updateBottomNavActive("menu");
+      else updateBottomNavActive("library");
+    }
+    const tr = e.target.closest(".transport-btn-round");
+    if (tr) {
+      const title = (tr.getAttribute("title") || "").toLowerCase();
+      if (title.includes("previous")) pulseTap(tr, "transport-slide-right");
+      if (title.includes("next")) pulseTap(tr, "transport-slide-left");
+    }
+  }, true);
+  const sub = document.getElementById("library-subnav-bar");
+  if (sub) sub.addEventListener("scroll", () => requestAnimationFrame(updateSubnavIndicator), { passive: true });
 }
 
 function refreshMusicPermanently() {
