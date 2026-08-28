@@ -2695,6 +2695,38 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
 
 
 
+
+html.perf-mode .song-catalog-row,
+html.perf-mode .album-unit-box {
+  animation: none !important;
+}
+html.perf-mode #docked-mini-player,
+html.perf-mode .portal-mini-return,
+html.perf-mode .sheet-content-dialog {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.perf-mode #docked-mini-player::before,
+html.perf-mode .player-ambient-glow,
+html.perf-mode .app-ambient-wall,
+html.perf-mode .player-ambient-wall {
+  display: none !important;
+}
+html.perf-mode .portal-category-card,
+html.perf-mode .song-catalog-row,
+html.perf-mode .album-unit-box,
+html.perf-mode .drilldown-header-card {
+  box-shadow: none !important;
+}
+html.perf-mode #library-category-portal {
+  box-shadow: none;
+}
+html.perf-mode .song-catalog-row,
+html.perf-mode .album-unit-box {
+  content-visibility: auto;
+  contain-intrinsic-size: 64px;
+}
+
 /* Large-library smoothness: no per-row entrance animation once catalog is huge */
 html.large-library .song-catalog-row,
 html.large-library .album-unit-box {
@@ -3762,6 +3794,16 @@ html.mini-has-context .mini-context-chip { display: inline; }
           </div>
           <div class="setting-card-item">
             <div>
+              <div style="font-weight: 650; font-size: 13px;">Replay Leveling</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Keep loud and quiet songs closer in volume</div>
+            </div>
+            <label class="toggle-switch-unit">
+              <input type="checkbox" id="toggle-replay-leveling" checked onchange="saveAppOption('replayLeveling', this.checked); configureReplayLeveling(state.songs[state.currentIndex]); syncPlaybackSettingsUI();">
+              <span class="toggle-slider-bar"></span>
+            </label>
+          </div>
+          <div class="setting-card-item">
+            <div>
               <div style="font-weight: 650; font-size: 13px;">Tap Track Opens Player</div>
               <div style="font-size: 11px; color: var(--text-tertiary);">Open Now Playing after choosing a song</div>
             </div>
@@ -3813,6 +3855,13 @@ html.mini-has-context .mini-context-chip { display: inline; }
             </div>
           </div>
           <div id="listdensity-pill-row" style="display: flex; gap: 6px; padding: 0 14px 12px 14px; flex-wrap: wrap;"></div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Performance Profile</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Auto keeps large libraries fast; Rich keeps all effects</div>
+            </div>
+          </div>
+          <div id="performance-pill-row" style="display: flex; gap: 6px; padding: 0 14px 12px 14px; flex-wrap: wrap;"></div>
           <div class="setting-card-item">
             <div>
               <div style="font-weight: 650; font-size: 13px;">Background Blur</div>
@@ -4100,6 +4149,8 @@ let state = {
     autoPause: true,
     lrclibFetch: true,
     autoQueue: true,
+    replayLeveling: true,
+    performanceMode: "auto",
     listTapOpenPlayer: false,
     listDensity: "comfort",
     tempo: 1.0,
@@ -4244,6 +4295,8 @@ window.addEventListener("DOMContentLoaded", () => {
 // when to recompute. Everything below is O(n) once per change, O(1) after.
 function bumpSongsRev() {
   state.songsRev = (state.songsRev || 0) + 1;
+  if (typeof _playContextCache !== "undefined") _playContextCache.rev = -1;
+  if (typeof _categoryGroupsCache !== "undefined") _categoryGroupsCache.rev = -1;
   if (typeof schedulePortalMetricsRefresh === "function") schedulePortalMetricsRefresh();
 }
 
@@ -4400,7 +4453,7 @@ function refreshBadges() {
   const listsTag = document.getElementById("tag-lists-count");
   if (listsTag) listsTag.textContent = state.playlists.length;
 
-  document.documentElement.classList.toggle("large-library", _badges.tracks > 1200);
+  applyPerformanceClass();
   document.getElementById("summary-meta-line").textContent = `${_badges.tracks} SONGS • DADDYAMP LOCAL LIBRARY`;
   document.getElementById("label-quick-meta").textContent = `${_badges.tracks} TRACKS AVAILABLE`;
   if (typeof updatePortalCountsOnly === "function" && _portalPrimed) updatePortalCountsOnly();
@@ -4412,7 +4465,7 @@ function refreshBadges() {
 
 function setupCanvas() {
   const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = isPerformanceMode() ? Math.min(window.devicePixelRatio || 1, 1.25) : (window.devicePixelRatio || 1);
   cachedCanvas.width = rect.width;
   cachedCanvas.height = rect.height;
   canvas.width = rect.width * dpr;
@@ -4464,7 +4517,7 @@ function drawPowerampScrubber(forceRedraw = false) {
   const centerY = height / 2.0;
 
   // Seek style: 'line' mode renders a clean rounded seekbar and returns
-  if (state.settings.seekStyle === "line") {
+  if (state.settings.seekStyle === "line" || isPerformanceMode()) {
     const trackY = centerY;
     const trackH = 4;
     ctx.fillStyle = "rgba(255,255,255,0.14)";
@@ -4707,9 +4760,14 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   document.getElementById("player-song-artist").textContent = `${song.artist} • ${song.album}`;
   
   const artImg = document.getElementById("player-artwork-img");
-  artImg.style.opacity = "0.4";
-  artImg.src = song.artwork || "artwork/default.png";
-  setTimeout(() => { artImg.style.opacity = "1"; }, 60);
+  if (isPerformanceMode()) {
+    artImg.style.opacity = "1";
+    artImg.src = song.artwork || "artwork/default.png";
+  } else {
+    artImg.style.opacity = "0.4";
+    artImg.src = song.artwork || "artwork/default.png";
+    setTimeout(() => { artImg.style.opacity = "1"; }, 60);
+  }
 
   updatePlayerContextUI();
 
@@ -4754,31 +4812,31 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   state.currentTime = 0;
   state.crossfadeTriggered = false;
   state.pendingSeekMs = (preSeekMs != null) ? preSeekMs : (song.cueOf ? (song.cueOf.start * 1000) : null);
-  setAmbientArt(song.artwork || "artwork/default.png");
-  retriggerAnim(document.getElementById("player-artwork-img"), "art-enter");
-  retriggerAnim(document.getElementById("player-song-title"), "text-enter");
-  retriggerAnim(document.getElementById("player-song-artist"), "text-enter");
-  retriggerAnim(document.getElementById("mini-meta-title"), "text-enter");
-  retriggerAnim(document.getElementById("mini-meta-artist"), "text-enter");
+  if (isPerformanceMode()) {
+    setAmbientArt("artwork/default.png", true);
+  } else {
+    setAmbientArt(song.artwork || "artwork/default.png");
+    retriggerAnim(document.getElementById("player-artwork-img"), "art-enter");
+    retriggerAnim(document.getElementById("player-song-title"), "text-enter");
+    retriggerAnim(document.getElementById("player-song-artist"), "text-enter");
+    retriggerAnim(document.getElementById("mini-meta-title"), "text-enter");
+    retriggerAnim(document.getElementById("mini-meta-artist"), "text-enter");
+  }
   updateTimerDisplays();
   updateMiniDeckMeta();
   updatePlayerContextUI();
   updateHeartVisuals(song.favorite);
 
-  if (state.settings.dynamicTheme) {
-    extractCoverPalette(song);
-  }
-
-  if (song.lyrics) {
-    parseLrcText(song.lyrics);
-  } else if (state.settings.lrclibFetch) {
-    queryLrclib(song);
-  } else {
-    parseLrcText("");
-  }
-
-  updateMediaSession(song);
+  configureReplayLeveling(song);
+  parseLrcText(song.lyrics || "");
   updateLyricsSync(0);
+
+  afterNextPaint(() => {
+    if (gen !== state.playGen) return;
+    if (state.settings.dynamicTheme) extractCoverPalette(song);
+    if (!song.lyrics && state.settings.lrclibFetch && !isPerformanceMode()) queryLrclib(song);
+    updateMediaSession(song);
+  }, isPerformanceMode() ? 120 : 20);
 
   if (autoPlay) {
     startPlayback();
@@ -4803,6 +4861,7 @@ function startPlayback() {
   if (!song) return;
 
   initWebAudioDsp();
+  configureReplayLeveling(song);
 
   song.play_count = (song.play_count || 0) + 1;
   state.isPlaying = true;
@@ -5044,6 +5103,8 @@ function syncPlaybackSettingsUI() {
   if (aq2) aq2.checked = !!state.settings.autoQueue;
   const lop = document.getElementById("toggle-list-open-player");
   if (lop) lop.checked = !!state.settings.listTapOpenPlayer;
+  const rg = document.getElementById("toggle-replay-leveling");
+  if (rg) rg.checked = state.settings.replayLeveling !== false;
   const rng = document.getElementById("tempo-range");
   if (rng) rng.value = state.settings.tempo || 1;
   const lbl = document.getElementById("tempo-value-label");
@@ -5367,6 +5428,69 @@ function applyAudioVolume() {
   }
 }
 
+
+function afterNextPaint(fn, delay = 0) {
+  requestAnimationFrame(() => setTimeout(() => { try { fn(); } catch (e) {} }, delay));
+}
+function isPerformanceMode() {
+  const mode = state.settings.performanceMode || "auto";
+  if (mode === "rich") return false;
+  if (mode === "speed") return true;
+  return (_badges && _badges.tracks > 1200) || state.songs.length > 1400;
+}
+function applyPerformanceClass() {
+  const perf = isPerformanceMode();
+  document.documentElement.classList.toggle("perf-mode", perf);
+  document.documentElement.classList.toggle("large-library", _badges.tracks > 1200);
+  return perf;
+}
+function setPerformanceMode(mode) {
+  state.settings.performanceMode = ["auto", "speed", "rich"].includes(mode) ? mode : "auto";
+  persistState();
+  applyPerformanceClass();
+  renderPerformancePills();
+  setupCanvas();
+  displayToast(`Performance: ${state.settings.performanceMode}`);
+}
+function renderPerformancePills() {
+  const row = document.getElementById("performance-pill-row");
+  if (!row) return;
+  row.innerHTML = "";
+  [["auto", "Auto"], ["speed", "Speed"], ["rich", "Rich"]].forEach(([v, label]) => {
+    const b = document.createElement("button");
+    b.className = "viz-mode-pill" + ((state.settings.performanceMode || "auto") === v ? " active" : "");
+    b.textContent = label;
+    b.onclick = () => setPerformanceMode(v);
+    row.appendChild(b);
+  });
+}
+function replayGainFromSong(song) {
+  if (!song || state.settings.replayLeveling === false) return 0;
+  const raw = song.replayGain || song.replayGainDb || song.trackGain || song.rgTrackGain;
+  if (raw != null && raw !== "") {
+    const m = String(raw).match(/-?\d+(\.\d+)?/);
+    if (m) return Math.max(-9, Math.min(6, parseFloat(m[0])));
+  }
+  const g = smartGenreOf(song);
+  const modernLoud = new Set(["Pop", "Hip-Hop/Rap", "Electronic", "Metal", "K-Pop", "J-Pop", "Bollywood"]);
+  const medium = new Set(["Rock", "Alternative", "R&B/Soul", "Reggae", "Qawwali", "Naat"]);
+  const quiet = new Set(["Classical", "Jazz", "Ambient", "Audiobook", "Podcast", "Quran", "Lecture"]);
+  if (modernLoud.has(g)) return -2.0;
+  if (medium.has(g)) return -1.0;
+  if (quiet.has(g)) return 0.8;
+  return -0.5;
+}
+function configureReplayLeveling(song) {
+  const db = replayGainFromSong(song);
+  state.currentReplayGainDb = db;
+  if (isAndroid) {
+    try { if (window.AndroidBridge.setNativeReplayGain) window.AndroidBridge.setNativeReplayGain(db, state.settings.replayLeveling !== false); } catch (e) {}
+  } else {
+    try { if (webAudio.preamp) webAudio.preamp.gain.value = Math.pow(10, db / 20); } catch (e) {}
+  }
+  updateAudioInfoChip();
+}
+
 /* =========================================================================
    FAVORITES
    ========================================================================= */
@@ -5435,6 +5559,7 @@ function applyDefaultAccent() {
 }
 
 function extractCoverPalette(song) {
+  if (isPerformanceMode()) { applyDefaultAccent(); return; }
   if (!song || !song.artwork) { applyDefaultAccent(); return; }
   if (paletteCache[song.id]) {
     const c = paletteCache[song.id];
@@ -5707,7 +5832,7 @@ function startVisualizer() {
   vizEngine.lastDataTs = Date.now();
   const cv = document.getElementById("viz-canvas");
   if (cv) {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = isPerformanceMode() ? Math.min(window.devicePixelRatio || 1, 1.25) : (window.devicePixelRatio || 1);
     cv.width = Math.max(320, cv.clientWidth * dpr);
     cv.height = Math.max(240, cv.clientHeight * dpr);
   }
@@ -7597,6 +7722,7 @@ function toggleReduceMotion() {
 function syncFluidSettingsUI() {
   renderSeekStylePills();
   renderListDensityPills();
+  renderPerformancePills();
   renderBlurPills();
   applyReduceMotionClass();
   const rm = document.getElementById("toggle-reduce-motion");
@@ -7794,15 +7920,36 @@ function contextSortSongs(list) {
   });
 }
 
+let _playContextCache = { rev: -1, key: "", uri: "", ctx: null };
 function currentPlaybackContext() {
   const song = state.songs[state.currentIndex];
   if (!song) return { type: "Library", label: "All songs", songs: [], index: -1, total: 0, duration: 0, key: "library::all" };
   const key = songContextKey(song);
-  let list = state.songs.filter(s => !s.virtual && songContextKey(s) === key);
-  list = contextSortSongs(list);
-  const idx = list.findIndex(s => currentSongUri(s) === currentSongUri(song));
+  const uri = currentSongUri(song);
+  if (_playContextCache.rev === state.songsRev && _playContextCache.key === key && _playContextCache.uri === uri && _playContextCache.ctx) return _playContextCache.ctx;
+
+  let list = [];
+  let idx = -1;
+  let duration = 0;
+  // In performance mode, never sort thousands of songs during a playback tick.
+  // Count/index in library order now; detailed views sort only when opened.
+  if (isPerformanceMode()) {
+    for (const s of state.songs) {
+      if (s.virtual || songContextKey(s) !== key) continue;
+      if (idx < 0 && currentSongUri(s) === uri) idx = list.length;
+      duration += s.duration || 0;
+      list.push(s);
+    }
+  } else {
+    list = state.songs.filter(s => !s.virtual && songContextKey(s) === key);
+    list = contextSortSongs(list);
+    idx = list.findIndex(s => currentSongUri(s) === uri);
+    duration = list.reduce((a, c) => a + (c.duration || 0), 0);
+  }
   const disp = contextDisplayForSong(song);
-  return { ...disp, songs: list, index: idx, total: list.length, duration: list.reduce((a, c) => a + (c.duration || 0), 0), key };
+  const ctx = { ...disp, songs: list, index: idx, total: list.length, duration, key };
+  _playContextCache = { rev: state.songsRev, key, uri, ctx };
+  return ctx;
 }
 
 function updatePlayerContextUI() {
@@ -7814,7 +7961,9 @@ function updatePlayerContextUI() {
   tag.title = `Open ${ctx.type.toLowerCase()} — ${ctx.total || 0} tracks${ctx.duration ? " • " + formatDuration(ctx.duration) : ""}`;
 }
 
+let _categoryGroupsCache = { rev: -1, groups: [] };
 function buildCategoryGroups() {
+  if (_categoryGroupsCache.rev === state.songsRev) return _categoryGroupsCache.groups;
   const map = new Map();
   for (const s of libraryTracks()) {
     const key = songContextKey(s);
@@ -7825,8 +7974,9 @@ function buildCategoryGroups() {
     map.get(key).songs.push(s);
   }
   const groups = Array.from(map.values());
-  groups.forEach(g => { g.songs = contextSortSongs(g.songs); });
+  if (!isPerformanceMode()) groups.forEach(g => { g.songs = contextSortSongs(g.songs); });
   groups.sort((a, b) => (a.type + a.label).localeCompare(b.type + b.label, undefined, { numeric: true, sensitivity: "base" }));
+  _categoryGroupsCache = { rev: state.songsRev, groups };
   return groups;
 }
 
@@ -9283,6 +9433,8 @@ function invokeDeviceScan() {
           duration: ds.duration || 180,
           trackNumber: ds.trackNumber || ds.track || 0,
           discNumber: ds.discNumber || ds.disc || 0,
+          replayGain: ds.replayGain || ds.replayGainDb || ds.trackGain || ds.rgTrackGain || "",
+          replayGainDb: ds.replayGainDb || "",
           bitrate: ds.bitrate || 0,
           sampleRate: ds.sampleRate || 0,
           mimeType: ds.mimeType || "audio/*",

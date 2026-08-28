@@ -217,3 +217,17 @@ Implemented another bug-kill pass based on direct user feedback:
 - Retested the reported Britney-style case with 10,000 Local Device tracks: all 10,000 were classified as Pop, 0 remained Unsorted.
 - Added more large-library jank reduction: disable heavy mini-player blur/artwork reflection and ambient glow in large-library mode; lighter shadows; portal remains opacity 1 while swiping.
 - Kept deterministic local inference only; no online upload, no network classification, no fake AI claims.
+
+## v1.32 Poweramp-research premium pass — smoothness first, honest audio control
+
+Implemented from the latest Poweramp premium research without making fake claims about unsupported engine features:
+- Added a user-visible Performance Profile: Auto, Speed, Rich. Auto protects huge libraries automatically; Speed forces the lean path; Rich preserves full visual polish on faster devices.
+- Added a lean rendering pipeline for big libraries and lower-end WebViews: no blur/glow/shadow-heavy surfaces, capped canvas DPR, simple seek rendering, no palette extraction in speed mode, and deferred lyrics/theme/media-session work after track-change paint.
+- Killed a real clunk source in playback: current context counters and category groups are now cached by `songsRev`; performance mode no longer sorts thousands of same-album tracks during `loadTrack()` or timer updates.
+- Added Replay Leveling as a practical premium-style DSP control. It honors ReplayGain-like metadata when available and otherwise uses conservative local genre estimates. Android routes it through the native bridge; web routes it through the existing preamp gain.
+- Kept the existing non-regression rules: no fake startup playback animation, no removed folder scanning, no removed swipe-down refresh, no AI/cloud classifier, no index guessing for playback identity.
+
+Validation added for this pass:
+- JS syntax check for the extracted inline script.
+- JSDOM large-library smoke with 10,000 tracks: Pop genre inference, 64 initial rows, Performance class enabled, portal open 0 ms, track load ~27 ms, context update ~1 ms, replay-gain bridge called, no JS errors.
+- Android APK build/sign/align verification before release.

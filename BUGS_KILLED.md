@@ -259,3 +259,15 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Reduced large-library jank further by disabling heavy mini-player blur/reflection, ambient glow, and expensive shadows in large-library mode.
 - Kept genre inference local and deterministic; no files are uploaded and no external classifier is called.
 - Rebuilt signed APK as versionCode 32 / versionName 1.31.
+
+## v1.32 — Poweramp-research premium smoothness + audio leveling
+
+- Added a Poweramp-inspired Performance Profile: Auto, Speed, and Rich.
+- Auto now enters a lean rendering path for very large libraries; Speed can force it on; Rich keeps the heavier visual atmosphere when the device can handle it.
+- Performance mode disables expensive blur/glow/shadow/row animations, caps canvas DPR, uses a lighter line seekbar, skips palette extraction, and defers lyrics/media-session/theme work until after first paint.
+- Fixed a major playback-lag hotspot: context counters no longer sort/filter thousands of tracks repeatedly during track load and playback ticks. Current album/folder counters are cached by library revision and use a single-pass fast path in performance mode.
+- Added Replay Leveling. When real ReplayGain-like fields are present they are honored; otherwise DaddyAmp applies a conservative local genre-based gain estimate so loud modern tracks and quieter genres sit closer together.
+- Android builds now call the native replay-gain bridge; web playback applies the same gain through the existing Web Audio preamp.
+- Settings gained clean controls for Replay Leveling and Performance Profile without removing existing folder scan, swipe refresh, gesture, genre, queue, playlist, and player behavior.
+- 10k-track smoke after the cache fix: 64 initial rows, Performance mode on, 0 JS errors, Britney/Local Device classified as Pop, portal open 0 ms, track load dropped from multi-second sort work to ~27 ms, context update ~1 ms, native replay-gain bridge called.
+- Rebuilt signed APK as versionCode 33 / versionName 1.32.
