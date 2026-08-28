@@ -154,3 +154,14 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Category navigation uses stable track identity and sorted context groups; no index guessing.
 - Preserved startup, playback, library persistence, and mini-player fixes.
 - Rebuilt signed APK as versionCode 23 / versionName 1.22.
+
+## v1.23 — artist detail + natural track ordering
+
+- Current context jump now supports artist detail when no album/folder context is stronger.
+- Rebuilt artist detail as a proper windowed render target; it no longer renders into the default library target and moves DOM afterward.
+- Artist headers now show song count, album count, and total duration.
+- Artist detail gained Shuffle Artist.
+- Context ordering now sorts by album, disc, track number, then natural title.
+- Native Android device/folder scans now include trackNumber where MediaStore/retriever exposes it; JS persists and uses it for album/artist ordering.
+- Fixed favorite lookup to compare stable ids as strings, preventing missed favorite toggles on mixed numeric/string ids.
+- Rebuilt signed APK as versionCode 24 / versionName 1.23.

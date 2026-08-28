@@ -3965,6 +3965,7 @@ function artistIndexEntries() {
       arr.songs.push(s);
     }
     const entries = Object.keys(map).map(k => map[k]);
+    entries.forEach(e => { e.songs = contextSortSongs(e.songs); });
     entries.sort((a, b) => a.name.localeCompare(b.name));
     _artistIndex = { rev: state.songsRev, entries };
   }
@@ -6757,11 +6758,19 @@ function contextDisplayForSong(song) {
   return { type: "Library", label: "All songs" };
 }
 
+function trackNum(v) {
+  if (v == null || v === "") return 0;
+  const m = String(v).match(/\d+/);
+  return m ? parseInt(m[0], 10) : 0;
+}
 function contextSortSongs(list) {
   return [...(list || [])].sort((a, b) => {
-    const da = Number(a.disc || a.discNumber || 0), db = Number(b.disc || b.discNumber || 0);
+    const aa = String(a.album || "");
+    const ab = String(b.album || "");
+    if (aa !== ab) return aa.localeCompare(ab, undefined, { numeric: true, sensitivity: "base" });
+    const da = trackNum(a.disc || a.discNumber), db = trackNum(b.disc || b.discNumber);
     if (da !== db) return da - db;
-    const ta = Number(a.track || a.trackNumber || 0), tb = Number(b.track || b.trackNumber || 0);
+    const ta = trackNum(a.track || a.trackNumber), tb = trackNum(b.track || b.trackNumber);
     if (ta !== tb) return ta - tb;
     return String(a.title || a.docName || "").localeCompare(String(b.title || b.docName || ""), undefined, { numeric: true, sensitivity: "base" });
   });
@@ -6841,6 +6850,8 @@ function openCurrentPlaybackContext() {
   }
   if (song.artist) {
     selectLibraryTab("artists");
+    const list = state.songs.filter(s => !s.virtual && s.artist === song.artist);
+    if (list.length) renderArtistDetailView(song.artist, list);
   } else {
     selectLibraryTab("tracks");
   }
@@ -7959,8 +7970,11 @@ function renderArtistCards() {
 
 function renderArtistDetailView(artistName, list) {
   const target = document.getElementById("library-render-target");
-  const first = list[0];
+  const sorted = contextSortSongs(list || []);
+  const first = sorted[0];
   if (!first) return;
+  const totalSecs = sorted.reduce((acc, cur) => acc + (cur.duration || 0), 0);
+  const albumCount = new Set(sorted.map(s => s.album || "Unknown Album")).size;
 
   target.innerHTML = `
     <div style="padding: 10px 14px 4px 14px;">
@@ -7970,14 +7984,17 @@ function renderArtistDetailView(artistName, list) {
     </div>
     <div class="drilldown-header-card">
       <div class="drilldown-art-box" style="border-radius: 50%;">
-        <img src="${first.artwork || 'artwork/default.png'}" alt="${artistName}">
+        <img src="${first.artwork || 'artwork/default.png'}" alt="${escAttr(artistName)}">
       </div>
       <div class="drilldown-info-col">
-        <div class="drilldown-main-title">${artistName}</div>
-        <div class="drilldown-sub-text">${list.length} songs in library</div>
+        <div class="drilldown-main-title">${escHtml(artistName)}</div>
+        <div class="drilldown-sub-text">${sorted.length} songs • ${albumCount} albums • ${formatDuration(totalSecs)}</div>
         <div class="drilldown-buttons-row">
-          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playArtistTracks('${artistName}')">
+          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playArtistTracks(${quote(artistName)}, false)">
             <svg class="icon icon-xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> Play Artist
+          </button>
+          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playArtistTracks(${quote(artistName)}, true)">
+            <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg> Shuffle
           </button>
         </div>
       </div>
@@ -7986,24 +8003,23 @@ function renderArtistDetailView(artistName, list) {
   `;
 
   const trackListContainer = document.getElementById("drilldown-artist-track-list");
-  renderSongsCatalog(list);
-  const rows = target.querySelector(".song-rows-catalog");
-  if (rows) trackListContainer.appendChild(rows);
+  renderSongsCatalog(sorted, "No tracks", trackListContainer);
 }
 
-function playArtistTracks(artistName) {
-  const artistSongs = state.songs.filter(s => s.artist === artistName);
+function playArtistTracks(artistName, shuffle = false) {
+  const artistSongs = contextSortSongs(state.songs.filter(s => !s.virtual && s.artist === artistName));
   if (artistSongs.length === 0) return;
   state.queue = [...artistSongs];
+  if (shuffle) state.queue.sort(() => Math.random() - 0.5);
   const firstSong = state.queue.shift();
   const idx = firstSong ? resolveSongIndex(firstSong) : -1;
   if (idx !== -1) loadTrack(idx, true);
   refreshBadges();
-  displayToast(`Playing artist: ${artistName}`);
+  displayToast(`${shuffle ? "Shuffling" : "Playing"} artist: ${artistName}`);
 }
 
 function toggleRowFavorite(id) {
-  const s = state.songs.find(x => x.id === id);
+  const s = state.songs.find(x => String(x.id) === String(id));
   if (s) {
     s.favorite = s.favorite ? 0 : 1;
     persistState();
@@ -8155,6 +8171,8 @@ function invokeDeviceScan() {
           genre: ds.genre || "Device Audio",
           year: ds.year || 2026,
           duration: ds.duration || 180,
+          trackNumber: ds.trackNumber || ds.track || 0,
+          discNumber: ds.discNumber || ds.disc || 0,
           bitrate: ds.bitrate || 0,
           sampleRate: ds.sampleRate || 0,
           mimeType: ds.mimeType || "audio/*",

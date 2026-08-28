@@ -111,3 +111,13 @@ Next in Phase 2:
 - Add album/folder total duration chips in more surfaces.
 - Add natural sort using disc/track metadata from native scanner when available.
 - Add setting for list tap behavior: play only vs play and open player.
+
+## v1.23 Phase 2 continuation — artist/detail sorting
+
+Implemented next category-intelligence layer:
+- Current context jump now opens artist detail when the playing song has artist context but no stronger album/folder target.
+- Artist detail is now a proper windowed list render target, not a fragile move-from-default-render hack.
+- Artist detail header now includes songs, album count, and total duration.
+- Artist detail gained a shuffle action.
+- Context sorting now uses album → disc → track number → natural title, so large artist/album views feel less random.
+- Android MediaStore/device scan and folder scan now carry trackNumber where available, improving album order without changing playback identity.

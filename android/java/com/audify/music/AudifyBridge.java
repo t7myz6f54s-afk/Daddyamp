@@ -425,6 +425,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 String artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
                 String album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
                 String genre = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE);
+                String trackNumStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER);
                 String durationStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
                 String bitrateStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE);
                 String mimeType = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE);
@@ -480,6 +481,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 song.put("genre", genre);
                 song.put("year", 2026);
                 song.put("duration", durationSec);
+                song.put("trackNumber", parseTrackNumber(trackNumStr));
                 song.put("bitrate", bitrateKbps);
                 song.put("sampleRate", sampleRateHz);
                 song.put("mimeType", mimeType != null ? mimeType : "audio/*");
@@ -1262,7 +1264,8 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                     MediaStore.Audio.Media.DATA,
                     MediaStore.Audio.Media.ALBUM_ID,
                     MediaStore.Audio.Media.YEAR,
-                    MediaStore.Audio.Media.MIME_TYPE
+                    MediaStore.Audio.Media.MIME_TYPE,
+                    MediaStore.Audio.Media.TRACK
             };
 
             String selection = MediaStore.Audio.Media.IS_MUSIC + " != 0";
@@ -1289,6 +1292,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 int albumIdCol = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID);
                 int yearCol = cursor.getColumnIndex(MediaStore.Audio.Media.YEAR);
                 int mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE);
+                int trackCol = cursor.getColumnIndex(MediaStore.Audio.Media.TRACK);
 
                 while (cursor.moveToNext()) {
                     long id = cursor.getLong(idCol);
@@ -1300,6 +1304,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                     long albumId = cursor.getLong(albumIdCol);
                     int year = yearCol != -1 ? cursor.getInt(yearCol) : 2026;
                     String mime = mimeCol != -1 ? cursor.getString(mimeCol) : "audio/mpeg";
+                    int trackNo = trackCol != -1 ? cursor.getInt(trackCol) : 0;
 
                     Uri contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id);
                     Uri albumArtUri = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId);
@@ -1312,6 +1317,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                     song.put("genre", "Device Audio");
                     song.put("year", year > 0 ? year : 2026);
                     song.put("duration", duration > 0 ? duration / 1000 : 0);
+                    song.put("trackNumber", normalizeTrackNumber(trackNo));
                     song.put("mimeType", mime);
                     song.put("path", contentUri.toString());
                     song.put("filePath", path != null ? path : "");
@@ -1453,6 +1459,23 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 v.vibrate(milliseconds);
             }
         } catch (Exception ignored) {}
+    }
+
+    private int parseTrackNumber(String raw) {
+        if (raw == null) return 0;
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(raw);
+            if (m.find()) return normalizeTrackNumber(Integer.parseInt(m.group()));
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    private int normalizeTrackNumber(int raw) {
+        // Android MediaStore sometimes stores disc*1000 + track. Keep only the
+        // visible track number for natural album ordering.
+        int v = Math.abs(raw);
+        if (v > 1000) v = v % 1000;
+        return v > 0 && v < 1000 ? v : 0;
     }
 
     private long stableTrackId(String key) {

@@ -54,7 +54,7 @@ public class FolderEngine extends SQLiteOpenHelper {
     private static class MsMeta {
         String title, artist, album, mime, data;
         long id, albumId, durationMs;
-        int year;
+        int year, track;
     }
 
     public FolderEngine(Activity activity, WebView webView) {
@@ -444,7 +444,8 @@ public class FolderEngine extends SQLiteOpenHelper {
                     MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
                     MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID,
                     MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.YEAR,
-                    MediaStore.Audio.Media.MIME_TYPE, MediaStore.Audio.Media.DATA
+                    MediaStore.Audio.Media.MIME_TYPE, MediaStore.Audio.Media.DATA,
+                    MediaStore.Audio.Media.TRACK
             };
             String selection = null;
             String[] selArgs = null;
@@ -468,6 +469,7 @@ public class FolderEngine extends SQLiteOpenHelper {
                     m.mime = c.getString(7);
                     String data = c.getString(8);
                     m.data = data;
+                    try { m.track = c.getInt(9); } catch (Exception ignored) { m.track = 0; }
                     if (data == null || data.isEmpty()) continue;
                     map.put(data.toLowerCase(), m);
                 }
@@ -558,7 +560,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             song.put("album", (m.album != null && !m.album.isEmpty()) ? m.album : (rootName != null ? rootName : "Folder Audio"));
             song.put("albumArtist", ""); song.put("genre", "Folder Audio");
             song.put("year", m.year > 0 && m.year < 3000 ? m.year : 0);
-            song.put("duration", m.durationMs / 1000); song.put("mimeType", m.mime != null ? m.mime : "audio/mpeg");
+            song.put("duration", m.durationMs / 1000); song.put("trackNumber", normalizeTrackNumber(m.track)); song.put("mimeType", m.mime != null ? m.mime : "audio/mpeg");
             song.put("size", 0); song.put("mtime", 0);
             song.put("url", contentUri.toString()); song.put("path", contentUri.toString()); song.put("filePath", m.data != null ? m.data : "");
             song.put("rootUri", tree.toString()); song.put("folderPath", rel); song.put("source", "folder"); song.put("docName", name);
@@ -585,6 +587,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             song.put("genre", "Folder Audio");
             song.put("year", m.year > 0 && m.year < 3000 ? m.year : 0);
             song.put("duration", m.durationMs / 1000);
+            song.put("trackNumber", normalizeTrackNumber(m.track));
             song.put("mimeType", m.mime != null ? m.mime : (mime != null ? mime : "audio/mpeg"));
             song.put("size", size);
             song.put("mtime", mtime);
@@ -664,6 +667,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             String albumArtist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST);
             String genre = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE);
             String durS = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            String trackS = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER);
             String yearS = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR);
             String mmrMime = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE);
 
@@ -679,6 +683,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             song.put("genre", genre != null && !genre.equals("<unknown>") && !genre.isEmpty() ? genre : "Folder Audio");
             song.put("year", yearS != null ? parseIntSafe(yearS) : 0);
             song.put("duration", durMs / 1000);
+            song.put("trackNumber", parseTrackNumber(trackS));
             song.put("mimeType", mmrMime != null ? mmrMime : (mime != null ? mime : "audio/mpeg"));
             song.put("size", size);
             song.put("mtime", mtime);
@@ -702,6 +707,21 @@ public class FolderEngine extends SQLiteOpenHelper {
             try { mmr.release(); } catch (Exception ignored) {}
         }
         return song;
+    }
+
+    private int parseTrackNumber(String raw) {
+        if (raw == null) return 0;
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(raw);
+            if (m.find()) return normalizeTrackNumber(Integer.parseInt(m.group()));
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    private int normalizeTrackNumber(int raw) {
+        int v = Math.abs(raw);
+        if (v > 1000) v = v % 1000;
+        return v > 0 && v < 1000 ? v : 0;
     }
 
     private String stripExt(String name) {
