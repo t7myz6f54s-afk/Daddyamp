@@ -53,3 +53,12 @@ Poweramp-like mini-player should behave as a small physical control deck, not a 
 - Gesture loop: horizontal swipe changes tracks, vertical swipe-up opens Now Playing.
 - Playing indication must be restrained: tiny LED + 5-bar meter only while audio is playing.
 - Metadata chip and mini-player should feel connected to the full player through shared artwork and accent.
+
+## v1.20 mini-player layout correction
+
+The premium mini-player must obey strict spatial ownership:
+- Artwork has a fixed slot.
+- Metadata owns the flexible middle but must never push into controls.
+- Time is compact elapsed-only while playing; full time remains in Now Playing.
+- Actions own a fixed right rail.
+- On narrow phones, decorative meter/heart yields before text collides.

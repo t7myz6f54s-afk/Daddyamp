@@ -126,3 +126,12 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Added swipe-up on the mini-player to expand Now Playing, while preserving horizontal swipe previous/next.
 - Added safer mini progress/time updates and calmer press feedback to reduce the AI-generated/clunky feel.
 - Rebuilt signed APK as versionCode 20 / versionName 1.19.
+
+## v1.20 — mini-player collision fix / designer layout pass
+
+- Fixed mini-player time text colliding into the heart/actions area.
+- Reworked the mini-player into strict zones: fixed artwork, flexible clipped metadata, optional meter, fixed action rail.
+- Changed mini time display to compact elapsed-only while playing; full elapsed/duration stays in Now Playing where there is enough room.
+- Added responsive rules: on narrow phones the decorative meter and then heart yield before text/control collision can happen.
+- Tightened typography, overflow, and ellipsis rules so long track names/artists/time cannot jumble the card.
+- Rebuilt signed APK as versionCode 21 / versionName 1.20.

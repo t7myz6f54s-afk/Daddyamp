@@ -2583,17 +2583,39 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   box-shadow: none;
 }
 .is-breathing .mini-playing-led { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
-.mini-meta-col { gap: 1px; padding-top: 2px; }
+.mini-meta-col {
+  gap: 1px;
+  padding-top: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
 .mini-kicker-row {
-  display: flex; align-items: center; gap: 5px;
+  display: grid;
+  grid-template-columns: minmax(38px, max-content) 4px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 5px;
   color: rgba(255,255,255,0.42);
   font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
+  font-size: 9px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
 }
-.mini-dot-sep { opacity: 0.45; }
+#mini-state-label { overflow: hidden; text-overflow: ellipsis; }
+#mini-time-label {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  letter-spacing: 0.03em;
+}
+.mini-dot-sep { opacity: 0.38; }
 .mini-title-line {
   font-size: 14px;
   font-weight: 760;
@@ -2610,9 +2632,10 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
 }
 .mini-wave-cluster {
   display: flex; align-items: center; justify-content: center; gap: 3px;
-  width: 27px; height: 28px;
-  margin-left: auto;
-  opacity: 0.42;
+  width: 24px; height: 28px;
+  flex: 0 0 24px;
+  margin-left: 0;
+  opacity: 0.38;
 }
 .mini-wave-cluster i {
   width: 3px; height: 7px; border-radius: 999px;
@@ -2632,7 +2655,11 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   from { transform: scaleY(0.55); opacity: 0.68; }
   to { transform: scaleY(2.45); opacity: 1; }
 }
-.mini-trailing-actions { gap: 3px; }
+.mini-trailing-actions {
+  gap: 3px;
+  flex: 0 0 auto;
+  margin-left: 0;
+}
 .mini-trailing-actions .btn-action-tap, .mini-trailing-actions .btn-inline-heart {
   width: 34px; height: 34px;
   background: rgba(255,255,255,0.035);
@@ -2644,10 +2671,18 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   box-shadow: 0 8px 24px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.35);
 }
 .mini-swipe-hint { bottom: 84px; border-radius: 999px; background: rgba(8,9,12,0.84); padding: 5px 9px; }
+@media (max-width: 430px) {
+  .mini-wave-cluster { display: none; }
+  .mini-kicker-row { grid-template-columns: minmax(34px, max-content) 4px minmax(0, 72px); font-size: 8.5px; }
+  .mini-trailing-actions .btn-inline-heart { display: none; }
+}
 @media (max-width: 390px) {
   .mini-wave-cluster, .mini-next-btn { display: none; }
-  #docked-mini-player { left: 8px; right: 8px; }
+  #docked-mini-player { left: 8px; right: 8px; gap: 8px; padding-right: 8px; }
   .mini-cover-shell { width: 50px; height: 50px; flex-basis: 50px; }
+  .mini-master-play-btn { width: 44px; height: 44px; }
+  .mini-kicker-row { grid-template-columns: 1fr; }
+  .mini-dot-sep, #mini-time-label { display: none; }
 }
 
 /* POWERAMP SEAMLESS REFINEMENT PASS: calmer motion, stronger touch feedback, less clunk */
@@ -4691,7 +4726,9 @@ function updateMiniDeckMeta() {
   if (timeEl) {
     const left = formatDuration(state.currentTime || 0);
     const right = state.duration ? formatDuration(state.duration) : "0:00";
-    timeEl.textContent = state.isPlaying ? `${left} / ${right}` : right;
+    // Keep mini-player premium and stable: compact elapsed while playing,
+    // duration while paused. Full elapsed/duration is already in Now Playing.
+    timeEl.textContent = state.isPlaying ? left : right;
   }
 }
 
