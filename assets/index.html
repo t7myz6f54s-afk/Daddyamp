@@ -2685,6 +2685,65 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   .mini-dot-sep, #mini-time-label { display: none; }
 }
 
+
+/* v1.21 Designer correction: strict mini-player zones, no metadata/control collision */
+#docked-mini-player {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 24px 44px auto;
+  align-items: center;
+  column-gap: 10px;
+}
+.mini-cover-shell { grid-column: 1; }
+.mini-meta-col { grid-column: 2; min-width: 0; max-width: 100%; }
+.mini-wave-cluster { grid-column: 3; }
+.mini-time-pill {
+  grid-column: 4;
+  width: 44px;
+  min-width: 44px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: rgba(255,255,255,0.68);
+  background: rgba(255,255,255,0.055);
+  border: 1px solid rgba(255,255,255,0.07);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.mini-trailing-actions { grid-column: 5; }
+.mini-kicker-row {
+  display: flex;
+  gap: 0;
+  min-width: 0;
+}
+#mini-state-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#mini-time-label, .mini-dot-sep { display: none !important; }
+.mini-title-line, .mini-artist-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 470px) {
+  #docked-mini-player { grid-template-columns: 52px minmax(0, 1fr) 38px auto; column-gap: 9px; }
+  .mini-wave-cluster { display: none; }
+  .mini-time-pill { grid-column: 3; width: 38px; min-width: 38px; font-size: 9.5px; }
+  .mini-trailing-actions { grid-column: 4; }
+  .mini-trailing-actions .btn-inline-heart { display: none; }
+}
+@media (max-width: 380px) {
+  #docked-mini-player { grid-template-columns: 48px minmax(0, 1fr) auto; column-gap: 8px; }
+  .mini-time-pill, .mini-next-btn { display: none; }
+  .mini-trailing-actions { grid-column: 3; }
+}
+
 /* POWERAMP SEAMLESS REFINEMENT PASS: calmer motion, stronger touch feedback, less clunk */
 .song-catalog-row, .folder-row-item, .folder-root-card, .album-unit-box {
   -webkit-tap-highlight-color: transparent;
@@ -2859,6 +2918,8 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
     <div class="mini-wave-cluster" id="mini-wave-cluster" aria-hidden="true">
       <i></i><i></i><i></i><i></i><i></i>
     </div>
+
+    <div class="mini-time-pill" id="mini-time-pill">0:00</div>
 
     <div class="mini-trailing-actions" onclick="event.stopPropagation()">
       <button class="btn-inline-heart" id="mini-heart-btn" onclick="toggleActiveTrackFavorite()" title="Favorite">
@@ -4720,15 +4781,18 @@ function updateMiniProgressBar() {
 function updateMiniDeckMeta() {
   const stateEl = document.getElementById("mini-state-label");
   const timeEl = document.getElementById("mini-time-label");
+  const pillEl = document.getElementById("mini-time-pill");
   if (stateEl) {
     stateEl.textContent = state.isPlaying ? "Playing" : (state.songs[state.currentIndex] ? "Paused" : "Ready");
   }
   if (timeEl) {
     const left = formatDuration(state.currentTime || 0);
     const right = state.duration ? formatDuration(state.duration) : "0:00";
-    // Keep mini-player premium and stable: compact elapsed while playing,
-    // duration while paused. Full elapsed/duration is already in Now Playing.
+    // Metadata line stays uncluttered; fixed-width pill owns time display.
     timeEl.textContent = state.isPlaying ? left : right;
+    if (pillEl) pillEl.textContent = state.isPlaying ? left : right;
+  } else if (pillEl) {
+    pillEl.textContent = state.duration ? formatDuration(state.duration) : "0:00";
   }
 }
 

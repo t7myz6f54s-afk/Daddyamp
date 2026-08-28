@@ -135,3 +135,12 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Added responsive rules: on narrow phones the decorative meter and then heart yield before text/control collision can happen.
 - Tightened typography, overflow, and ellipsis rules so long track names/artists/time cannot jumble the card.
 - Rebuilt signed APK as versionCode 21 / versionName 1.20.
+
+## v1.21 — Poweramp designer plan + mini-player strict zones
+
+- Added POWERAMP_GRADE_MASTER_PLAN.md: a full research-backed roadmap for making DaddyAmp Poweramp-grade without regressing what already works.
+- Fixed remaining mini-player clunk by moving time into a fixed-width pill outside the flexible metadata area.
+- Converted the mini-player to strict grid zones: art, metadata, optional meter, time pill, controls.
+- Hidden duplicate inline time from the metadata kicker so it cannot run into the heart/play rail.
+- Added responsive hierarchy: meter hides first, then heart/next yields on narrow devices, while play remains protected.
+- Rebuilt signed APK as versionCode 22 / versionName 1.21.
