@@ -616,3 +616,18 @@ session restore for non-folder libraries, palette default-accent fallback, stabl
 ids for folder tracks (now-playing indicator). Smoke suite rebuilt at
 /home/user/smoke/smoke.mjs (persistent) — 108/108. Android SDK re-provisioned
 at /home/user/android-sdk (build-tools/34.0.0 + platforms/android-34).
+
+---
+## v1.12 status (2026-08-28) — shipped, STOP-THE-PRESS proof green
+- Playback identity P0 completed: tap-exact A/B (20/20), idle ≠ changes, scan/import never
+  switch, audio errors are honest toasts (auto-skip REVERTED as a bug), restore same-track
+  + autoplay-only-if-was-playing, stable ids (folderTrackId), index remap on every rebuild,
+  generation tokens for palette/lyrics/seek. Proof: PLAYBACK_PROOF.md + suite section M.
+- Scan chrome removed (banner pill gone); inline status in Music Folders; scans background-only.
+- Catalog virtualized (80-row chunks + observer). Poweramp polish: cover 60vw, mini 50px,
+  NP 68px, tokens 90/180/380/420/600, OLED ladder.
+- Suite: /home/user/smoke/smoke.mjs → 140/140 (node_modules reinstalls: npm i jsdom fake-indexeddb).
+- APK: DaddyAmp.apk v1.12 (versionCode 13), asset sha256 583766f4…1e599 == web/index.html.
+- Commit a88e0a8 on main (parent 3490acb v1.11). Raw URL serves v1.12.
+- Open: on-device 2000-track perf, native art thumbnail cache, keystore public/private call,
+  token rotation. FEATURE_LOCK.md is the contract going forward.
