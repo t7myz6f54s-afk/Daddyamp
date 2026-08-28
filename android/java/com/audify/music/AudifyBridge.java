@@ -74,6 +74,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     private Visualizer nativeVisualizer = null;
     private boolean vizCaptureOn = false;
     private int audioSessionId = 0;
+    private int vizSessionId = 0;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private String currentPath = "";
@@ -571,6 +572,13 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     }
 
     private void setupAudioFx(int audioSessionId) {
+        if (nativeVisualizer != null && this.audioSessionId != 0 && this.audioSessionId != audioSessionId) {
+            // Source switched to a new audio session: kill the stale visualizer or it
+            // keeps reporting as "running" while never delivering data.
+            try { nativeVisualizer.release(); } catch (Exception ignored) {}
+            nativeVisualizer = null;
+            vizCaptureOn = false;
+        }
         this.audioSessionId = audioSessionId;
         try {
             if (nativeEqualizer != null) {
@@ -762,9 +770,14 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     @JavascriptInterface
     public boolean startVisualizerCapture() {
         try {
-            if (nativeVisualizer != null) return true;
+            if (nativeVisualizer != null && vizSessionId == audioSessionId) return true;
             if (audioSessionId == 0 || mediaPlayer == null) return false;
+            if (nativeVisualizer != null) {
+                try { nativeVisualizer.release(); } catch (Exception ignored) {}
+                nativeVisualizer = null;
+            }
             nativeVisualizer = new Visualizer(audioSessionId);
+            vizSessionId = audioSessionId;
             int capSize = Math.min(512, Visualizer.getCaptureSizeRange()[1]);
             nativeVisualizer.setCaptureSize(Math.max(Visualizer.getCaptureSizeRange()[0], capSize));
             nativeVisualizer.setDataCaptureListener(new Visualizer.OnDataCaptureListener() {

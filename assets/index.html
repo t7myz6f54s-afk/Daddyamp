@@ -3549,6 +3549,15 @@ let webAudio = {
   filters: []
 };
 
+function handleAppVisibilityChange() {
+  if (document.hidden) {
+    if (vizEngine.running) stopVisualizer();
+  } else if (state.playerCenterMode === "viz" && state.isPlaying) {
+    startVisualizer();
+  }
+}
+document.addEventListener("visibilitychange", handleAppVisibilityChange);
+
 const audioEl = document.getElementById("html5-audio-element");
 const canvas = document.getElementById("poweramp-canvas-scrubber");
 const ctx = canvas.getContext("2d");
@@ -3970,6 +3979,7 @@ function loadTrack(index, autoPlay = true) {
   state.duration = song.duration || 30;
   state.currentTime = 0;
   state.crossfadeTriggered = false;
+  state.audioErrorSkips = 0;
   state.pendingSeekMs = song.cueOf ? (song.cueOf.start * 1000) : null;
   setAmbientArt(song.artwork || "artwork/default.png");
   retriggerAnim(document.getElementById("player-artwork-img"), "art-enter");
@@ -4456,8 +4466,16 @@ function applyPaletteNew(accent, accent2, scrimTint) {
   if (typeof drawPowerampScrubber === "function") drawPowerampScrubber(true);
 }
 
+function currentFallbackAccent() {
+  return desatAccent(state.settings.accentColor || "#7EC8E3");
+}
+
+function applyDefaultAccent() {
+  applyPaletteNew(currentFallbackAccent(), currentFallbackAccent(), "rgba(0, 0, 0, 0)");
+}
+
 function extractCoverPalette(song) {
-  if (!song || !song.artwork) return;
+  if (!song || !song.artwork) { applyDefaultAccent(); return; }
   if (paletteCache[song.id]) {
     const c = paletteCache[song.id];
     applyPaletteNew(c.accent, c.accent2, c.scrimTint);
@@ -4465,6 +4483,7 @@ function extractCoverPalette(song) {
   }
   const img = new Image();
   if (/^https?:/i.test(song.artwork || "")) img.crossOrigin = "anonymous";
+  img.onerror = () => { applyDefaultAccent(); };
   img.src = song.artwork;
   img.onload = () => {
     try {
@@ -4700,7 +4719,8 @@ const vizEngine = {
   eased: new Float32Array(32),
   native: false,
   ambientT: 0,
-  lastFrame: 0
+  lastFrame: 0,
+  lastDataTs: 0
 };
 
 function setVisualizerMode(mode) {
@@ -4712,7 +4732,14 @@ function setVisualizerMode(mode) {
 
 function startVisualizer() {
   if (vizEngine.running) return;
+  if (prefersReducedMotion()) {
+    // Reduce-motion: the visualization is off; leave the canvas clean.
+    const cv = document.getElementById("viz-canvas");
+    if (cv) { const c2 = cv.getContext("2d"); if (c2) c2.clearRect(0, 0, cv.width, cv.height); }
+    return;
+  }
   vizEngine.running = true;
+  vizEngine.lastDataTs = Date.now();
   const cv = document.getElementById("viz-canvas");
   if (cv) {
     const dpr = window.devicePixelRatio || 1;
@@ -4752,6 +4779,7 @@ function stopVisualizer() {
 }
 
 window.onVisualizerData = function(csv) {
+  vizEngine.lastDataTs = Date.now();
   try {
     const first = parseFloat(String(csv || "").split(",")[0]);
     if (isFinite(first)) {
@@ -4817,6 +4845,11 @@ function drawVizFrame(t) {
     }
   } else {
     // native data arrived via onVisualizerData; just relax slightly between frames
+    if (state.isPlaying && Date.now() - vizEngine.lastDataTs > 900) {
+      // Capture silently died (session swap, OEM quirk). Fall back to the ambient
+      // spectrum so the visualization is never a blank screen.
+      vizEngine.native = false;
+    }
     for (let i = 0; i < 32; i++) vizEngine.eased[i] *= 0.985;
   }
 
@@ -6091,6 +6124,13 @@ function folderTreeOf(rootUri) {
   return root;
 }
 
+function folderTrackId(url) {
+  const str = String(url || "");
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  return 700000 + ((h >>> 0) % 100000);
+}
+
 function folderApplyToLibrary() {
   state.songs = state.songs.filter(s => s.source !== "folder").concat(folderSongs());
   if (typeof refreshBadges === "function") refreshBadges();
@@ -6206,6 +6246,7 @@ window.onFolderScanProgress = function(p) {
   let changed = false;
   batch.forEach(s => {
     if (!s || !s.url) return;
+    if (s.id == null) s.id = folderTrackId(s.url);
     folderState.tracks.set(s.url, s);
     changed = true;
   });
@@ -6277,10 +6318,8 @@ async function folderAutoRescan() {
 
 async function initFolderSystem() {
   await folderInit();
-  if (folderState.roots.length > 0) {
-    restoreSession();
-    folderAutoRescan();
-  }
+  if (folderState.roots.length > 0) folderAutoRescan();
+  restoreSession();
 }
 
 /* ------------------------------------------------------- session restore */
@@ -7875,6 +7914,20 @@ window.onAudioFinished = function() {
   state.listenStartedAt = null;
   persistState();
   handleTrackFinished();
+};
+
+window.onAudioError = function(code) {
+  state.isPlaying = false;
+  updatePlayButtonVisuals(false);
+  displayToast("This file can't be played — skipping");
+  const cur = state.currentIndex;
+  const next = (cur + 1) % Math.max(1, state.songs.length);
+  state.audioErrorSkips = (state.audioErrorSkips || 0) + 1;
+  if (next !== cur && state.audioErrorSkips <= 2) {
+    loadTrack(next, true);
+    return;
+  }
+  state.audioErrorSkips = 0;
 };
 
 window.onAudioBecomingNoisy = function() {

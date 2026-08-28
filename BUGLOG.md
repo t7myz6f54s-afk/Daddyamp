@@ -87,3 +87,23 @@ atmosphere update, empty lyrics copy, no-backdrop-filter on the scroll container
 deck blur cap, tint blend mode, throttled scan merge, broken-art fallback, now-playing
 row EQ bars. Full suite: folders persistence/restart, session restore, cue sheets,
 tag write-back, media session, crossfade, playlists, stats, themes, history.
+
+## v1.11 — verification pass (see FEATURE_AUDIT.md)
+
+- P1 "Visualizer doesn't work": stale native Visualizer survived audio-session
+  changes (fix: re-attach on session change + vizSessionId), JS had no watchdog for
+  a dead capture (fix: 900ms watchdog → ambient fallback; never blank), no
+  background stop (fix: visibilitychange), reduce-motion ignored by viz (fix: gate).
+- window.onAudioError was fired by native but unhandled in JS → silent stall on a
+  missing/corrupt file. Fix: toast "This file can't be played — skipping" + auto-skip
+  (max 2 consecutive).
+- Session restore only ran when folder roots existed → picker/device-scan libraries
+  lost their playhead after kill. Fix: restore whenever a session + library exist.
+- Palette could stay one track behind: file:// art blocked by crossOrigin (fixed in
+  v1.10) and no fallback when a cover was missing or failed to decode. Fix:
+  applyDefaultAccent on missing/onerror; artwork-less tracks no longer keep the
+  previous track's accent.
+- Folder-scan tracks had no stable `id` → now-playing row indicator/EQ metering
+  didn't match folder songs. Fix: deterministic folderTrackId assigned at merge.
+- Suite relocated to a persistent workspace path (/home/user/smoke/smoke.mjs) after
+  /tmp was recycled; rebuilt with full A→L coverage + verify section; 108/108.

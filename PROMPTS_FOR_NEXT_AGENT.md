@@ -605,3 +605,14 @@ lyrics stays a layer, skip-in-lyrics updates art), scan heartbeat + fd-based tag
 from the library scroll container (big lag source), tint blend-mode removed, palette
 crossOrigin fix for file:// folder art, broken-art fallback, folder-first empty state,
 now-playing accent + EQ bars, safe areas, lyrics copy. 131/131 checks.
+
+
+## v1.11 — Verification pass (see FEATURE_AUDIT.md)
+Full claimed-feature matrix audited (F1-F10, P1-P13, A1-A6, L1-L8, C1-C6, E1-E4,
+N1-N5, S1-S4) — all PASS or N/A (never claimed). Fixed: visualizer (stale native
+Visualizer on session change + JS watchdog → ambient fallback + background
+stop/resume + reduce-motion gate), unhandled window.onAudioError (toast + auto-skip),
+session restore for non-folder libraries, palette default-accent fallback, stable
+ids for folder tracks (now-playing indicator). Smoke suite rebuilt at
+/home/user/smoke/smoke.mjs (persistent) — 108/108. Android SDK re-provisioned
+at /home/user/android-sdk (build-tools/34.0.0 + platforms/android-34).
