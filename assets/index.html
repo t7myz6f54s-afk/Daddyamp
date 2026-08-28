@@ -4864,6 +4864,7 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
     setAmbientArt(song.artwork || "artwork/default.png", true);
   } else {
     setAmbientArt(song.artwork || "artwork/default.png");
+    applyInstantSongMood(song);
     retriggerAnim(document.getElementById("player-artwork-img"), "art-enter");
     retriggerAnim(document.getElementById("player-song-title"), "text-enter");
     retriggerAnim(document.getElementById("player-song-artist"), "text-enter");
@@ -5618,6 +5619,26 @@ function currentFallbackAccent() {
 
 function applyDefaultAccent() {
   applyPaletteNew(currentFallbackAccent(), currentFallbackAccent(), "rgba(0, 0, 0, 0)");
+}
+
+function instantMoodAccentForSong(song) {
+  const g = smartGenreOf(song);
+  const map = {
+    "Pop": "#FF4FA3", "Hip-Hop/Rap": "#FFB300", "R&B/Soul": "#B66DFF",
+    "Electronic": "#00E5FF", "Rock": "#FF5A4F", "Metal": "#B7B7C8",
+    "Jazz": "#D6A15C", "Classical": "#9BC7FF", "Qawwali": "#20D08A",
+    "Bollywood": "#FF6F3C", "Ambient": "#61D6FF", "Reggae": "#73D13D"
+  };
+  return desatAccent(map[g] || state.settings.accentColor || "#7EC8E3");
+}
+
+function applyInstantSongMood(song) {
+  if (!song || !state.settings.dynamicTheme || isSpeedMode()) return;
+  const accent = instantMoodAccentForSong(song);
+  let r = 70, g = 100, b = 130;
+  try { r = parseInt(accent.slice(1, 3), 16); g = parseInt(accent.slice(3, 5), 16); b = parseInt(accent.slice(5, 7), 16); } catch (e) {}
+  const scrimTint = `rgba(${Math.floor(r * 0.46)}, ${Math.floor(g * 0.46)}, ${Math.floor(b * 0.46)}, 0.58)`;
+  applyPaletteNew(accent, accent, scrimTint);
 }
 
 function setDynamicArtworkPalette(enabled) {

@@ -324,3 +324,11 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Playlist row insertion now uses a DocumentFragment to reduce layout churn.
 - Revalidated a 5,000-track broken-settings upgrade: Wave restored, Dynamic Artwork Palette restored, Speed reset to Auto, waveform draw path executed, artwork ambience applied, unsafe metadata escaped, 120 playlist rows capped, and no JS errors.
 - Rebuilt signed APK as versionCode 38 / versionName 1.37.
+
+## v1.38 — Android WebView fluidity + instant album-colour response
+
+- Tuned the Android WebView host for smoother compositing: hardware layer, no scrollbars/overscroll glow, normal text zoom, default cache mode, mixed-content compatibility, and offscreen pre-raster on supported Android versions.
+- Added instant per-song mood colouring before cover palette extraction finishes. Track changes now immediately tint the app from local genre/track context, then the real album-art palette replaces it when decoded.
+- Kept the restored waveform active in Auto performance mode and verified the waveform draw path still executes after recovering from old bad Line/Speed/off-palette settings.
+- Rechecked large-library fluidity: 10k-track smoke kept Auto performance on, Speed off, Wave restored, Dynamic Artwork Palette restored, portal open 0 ms, first track rows 64, and no JS errors.
+- Rebuilt signed APK as versionCode 39 / versionName 1.38.

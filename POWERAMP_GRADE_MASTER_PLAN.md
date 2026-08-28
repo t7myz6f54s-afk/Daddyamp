@@ -276,3 +276,10 @@ Further corrected the visual regression without giving back the old lag:
 - Album-art colour atmosphere is stronger.
 - More metadata/artwork paths are escaped to prevent interface glitches from unusual tags.
 - Large playlist detail is capped and fragment-rendered in Performance mode so queue/list smoothness work extends to playlists too.
+
+## v1.38 continuation — native shell smoothness + instant colour
+
+Continued the smooth/fluid push without deleting signature visuals:
+- Android WebView is now explicitly hardware-composited, de-scrolled, and configured for stable local-app rendering.
+- Album-colour feel no longer waits for image decode; DaddyAmp applies an immediate per-song mood tint, then refines it from the cover palette.
+- Waveform and adaptive colour remain protected defaults after upgrade recovery.
