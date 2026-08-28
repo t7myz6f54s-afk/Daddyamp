@@ -198,3 +198,14 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Mini-player swipe down opens the current context; swipe up still opens Now Playing.
 - Preserved strict mini-player zones so time/heart/action collision stays fixed.
 - Rebuilt signed APK as versionCode 27 / versionName 1.26.
+
+## v1.27 — fluid player gestures + smoother pinch
+
+- Added fluid full-player drag-down minimize from the header/deck with live movement feedback.
+- Artwork gestures are more tactile: swipe up opens lyrics, swipe down minimizes, left/right skips tracks.
+- Lyrics stage now supports swipe down to return to artwork.
+- Reworked pinch-to-size so it does not re-render the list while fingers are moving.
+- Pinch now shows a lightweight List Size HUD and compositor-only preview scale, then applies the actual density once on release.
+- Removed duplicate pinch touchmove path and moved preview updates through requestAnimationFrame.
+- Preserved strict mini-player collision zones, category swipes, folder scans, refresh, and large-library persistence.
+- Rebuilt signed APK as versionCode 28 / versionName 1.27.

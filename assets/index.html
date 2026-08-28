@@ -2692,6 +2692,49 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
 
 
 
+
+/* Fluid gesture polish */
+#full-player-screen.gesture-dragging {
+  transition: none !important;
+  will-change: transform, opacity;
+}
+.player-center-stage.gesture-stage-shift {
+  transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out);
+}
+#list-zoom-hud {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--mini-player-h) + var(--bottom-nav-h) + 24px);
+  transform: translateX(-50%) scale(0.96);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 130;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(7, 8, 11, 0.86);
+  border: 1px solid var(--border-medium);
+  color: var(--text-pure);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.38);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+#list-zoom-hud.visible { opacity: 1; transform: translateX(-50%) scale(1); }
+#library-render-target.pinch-preview {
+  transform: scale(var(--pinch-preview-scale, 1));
+  transform-origin: 50% 0%;
+  transition: none !important;
+  will-change: transform;
+}
+html.pinch-active .song-catalog-row,
+html.pinch-active .album-unit-box {
+  animation: none !important;
+}
+
 /* Pinch-size library views: Poweramp-style list zoom */
 html.list-size-text .row-artwork-frame { display: none; }
 html.list-size-text .song-catalog-row { min-height: 42px; padding: 6px 14px; gap: 8px; }
@@ -3944,6 +3987,7 @@ window.addEventListener("DOMContentLoaded", () => {
   syncSystemVolumeFromAndroid();
   initFolderSystem();
   attachCoverGestures();
+  attachFullPlayerFluidGestures();
   attachCatalogLoadMore();
   attachLibraryPinchZoom();
   armTransportHoldMenus();
@@ -6743,32 +6787,80 @@ function pinchDistance(touches) {
   const dy = touches[0].clientY - touches[1].clientY;
   return Math.hypot(dx, dy);
 }
+function ensureListZoomHud() {
+  let hud = document.getElementById("list-zoom-hud");
+  if (!hud) {
+    hud = document.createElement("div");
+    hud.id = "list-zoom-hud";
+    document.body.appendChild(hud);
+  }
+  return hud;
+}
+
+function previewListPinch(delta) {
+  const target = document.getElementById("library-render-target");
+  const hud = ensureListZoomHud();
+  const cur = state.settings.listDensity || "comfort";
+  const idx = Math.max(0, LIST_DENSITY_LEVELS.indexOf(cur));
+  const dir = delta > 0 ? 1 : (delta < 0 ? -1 : 0);
+  const next = LIST_DENSITY_LEVELS[Math.max(0, Math.min(LIST_DENSITY_LEVELS.length - 1, idx + dir))] || cur;
+  const eased = Math.max(-0.035, Math.min(0.035, delta / 2600));
+  if (target) {
+    target.classList.add("pinch-preview");
+    target.style.setProperty("--pinch-preview-scale", String(1 + eased));
+  }
+  document.documentElement.classList.add("pinch-active");
+  hud.textContent = `List size: ${LIST_DENSITY_LABELS[next]}`;
+  hud.classList.add("visible");
+}
+
+function clearListPinchPreview() {
+  const target = document.getElementById("library-render-target");
+  const hud = document.getElementById("list-zoom-hud");
+  if (target) {
+    target.classList.remove("pinch-preview");
+    target.style.removeProperty("--pinch-preview-scale");
+  }
+  document.documentElement.classList.remove("pinch-active");
+  if (hud) setTimeout(() => hud.classList.remove("visible"), 160);
+}
+
 function attachLibraryPinchZoom() {
   const sc = document.getElementById("library-scroll-container");
   if (!sc || sc.dataset.pinchZoomArmed) return;
   sc.dataset.pinchZoomArmed = "1";
+  let raf = 0;
+  const updatePreview = () => {
+    raf = 0;
+    const delta = (attachLibraryPinchZoom._lastDistance || 0) - listPinchStartDistance;
+    previewListPinch(delta);
+  };
   sc.addEventListener("touchstart", e => {
     if (e.touches && e.touches.length === 2) {
       listPinchStartDistance = pinchDistance(e.touches);
+      attachLibraryPinchZoom._lastDistance = listPinchStartDistance;
       listPinchActive = listPinchStartDistance > 0;
+      if (listPinchActive) previewListPinch(0);
     }
   }, { passive: true });
   sc.addEventListener("touchmove", e => {
-    if (listPinchActive && e.touches && e.touches.length === 2) e.preventDefault();
+    if (!listPinchActive || !e.touches || e.touches.length !== 2) return;
+    e.preventDefault();
+    attachLibraryPinchZoom._lastDistance = pinchDistance(e.touches);
+    if (!raf) raf = requestAnimationFrame(updatePreview);
   }, { passive: false });
-  sc.addEventListener("touchend", e => {
+  const finish = () => {
     if (!listPinchActive) return;
-    const endDistance = e.touches && e.touches.length >= 2 ? pinchDistance(e.touches) : 0;
-    const changed = endDistance || attachLibraryPinchZoom._lastDistance || 0;
-    const delta = changed - listPinchStartDistance;
-    if (Math.abs(delta) > 34) zoomListDensity(delta > 0 ? 1 : -1);
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    const delta = (attachLibraryPinchZoom._lastDistance || listPinchStartDistance) - listPinchStartDistance;
+    clearListPinchPreview();
+    if (Math.abs(delta) > 28) zoomListDensity(delta > 0 ? 1 : -1);
     listPinchActive = false;
     listPinchStartDistance = 0;
     attachLibraryPinchZoom._lastDistance = 0;
-  }, { passive: true });
-  sc.addEventListener("touchmove", e => {
-    if (listPinchActive && e.touches && e.touches.length === 2) attachLibraryPinchZoom._lastDistance = pinchDistance(e.touches);
-  }, { passive: true });
+  };
+  sc.addEventListener("touchend", finish, { passive: true });
+  sc.addEventListener("touchcancel", finish, { passive: true });
 }
 
 function applySeekStyle(style) {
@@ -7838,32 +7930,109 @@ function attachCoverGestures() {
   if (!box || box.dataset.gestures) return;
   box.dataset.gestures = "1";
   let lpTimer = null;
-  box.addEventListener("touchstart", () => { lpTimer = setTimeout(() => triggerTrackMenu(state.songs[state.currentIndex]), 560); }, { passive: true });
-  ["touchmove", "touchend", "touchcancel"].forEach(t => box.addEventListener(t, () => { if (lpTimer) clearTimeout(lpTimer); lpTimer = null; }, { passive: true }));
-  let sx = 0, sy = 0, active = false;
+  let sx = 0, sy = 0, active = false, moved = false;
+  const resetArt = () => {
+    box.style.transition = "transform 160ms var(--ease-out)";
+    box.style.transform = "";
+    setTimeout(() => { box.style.transition = ""; }, 180);
+  };
   box.addEventListener("touchstart", e => {
     if (e.touches.length !== 1) return;
-    sx = e.touches[0].clientX; sy = e.touches[0].clientY; active = true;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; active = true; moved = false;
+    lpTimer = setTimeout(() => { if (!moved) triggerTrackMenu(state.songs[state.currentIndex]); }, 560);
   }, { passive: true });
   box.addEventListener("touchmove", e => {
-    if (active && Math.abs(e.touches[0].clientX - sx) > 24) {
-      // prevent page scroll while the horizontal gesture is engaged
-      e.preventDefault();
-    }
+    if (!active || !e.touches || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - sx;
+    const dy = e.touches[0].clientY - sy;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) { moved = true; if (lpTimer) clearTimeout(lpTimer); lpTimer = null; }
+    if (Math.abs(dx) > 18 || Math.abs(dy) > 18) e.preventDefault();
+    const tx = Math.max(-42, Math.min(42, dx * 0.18));
+    const ty = Math.max(-28, Math.min(34, dy * 0.18));
+    box.style.transition = "none";
+    box.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${dy < 0 ? 1.012 : 0.992})`;
   }, { passive: false });
   box.addEventListener("touchend", e => {
+    if (lpTimer) clearTimeout(lpTimer); lpTimer = null;
     if (!active) return;
     active = false;
     const dx = e.changedTouches[0].clientX - sx;
     const dy = e.changedTouches[0].clientY - sy;
-    if (Math.abs(dx) > 64 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+    resetArt();
+    if (Math.abs(dx) > 64 && Math.abs(dx) > Math.abs(dy) * 1.35) {
       if (dx < 0) executePlayNext(); else executePlayPrevious();
-    } else if (dy < -64 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+    } else if (dy < -56 && Math.abs(dy) > Math.abs(dx) * 1.25) {
       switchPlayerStage("lyrics");
-    } else if (dy > 64 && Math.abs(dy) > Math.abs(dx) * 1.4) {
+    } else if (dy > 72 && Math.abs(dy) > Math.abs(dx) * 1.25) {
       collapseNowPlayingScreen();
     }
   }, { passive: true });
+  box.addEventListener("touchcancel", () => { active = false; if (lpTimer) clearTimeout(lpTimer); lpTimer = null; resetArt(); }, { passive: true });
+}
+
+function attachFullPlayerFluidGestures() {
+  const np = document.getElementById("full-player-screen");
+  const stage = document.querySelector(".player-center-stage");
+  if (!np || np.dataset.fluidGestures) return;
+  np.dataset.fluidGestures = "1";
+
+  let dsx = 0, dsy = 0, dragging = false, dragFrom = "", lastY = 0, lastT = 0;
+  const interactive = "button,input,select,textarea,.lyrics-scroll-stream,.sheet-content-dialog,#poweramp-canvas-scrubber,.artwork-frame-box";
+  np.addEventListener("touchstart", e => {
+    if (!np.classList.contains("open") || !e.touches || e.touches.length !== 1) return;
+    if (e.target.closest(interactive)) return;
+    const t = e.touches[0];
+    dsx = t.clientX; dsy = t.clientY; lastY = dsy; lastT = Date.now(); dragging = false;
+    dragFrom = e.target.closest(".full-player-header-bar,.player-bottom-deck") ? "dismiss" : "stage";
+  }, { passive: true });
+  np.addEventListener("touchmove", e => {
+    if (!e.touches || e.touches.length !== 1 || !dragFrom) return;
+    const t = e.touches[0];
+    const dx = t.clientX - dsx;
+    const dy = t.clientY - dsy;
+    const vertical = Math.abs(dy) > Math.abs(dx) * 1.2;
+    if (!dragging && vertical && Math.abs(dy) > 12) dragging = true;
+    if (!dragging) return;
+    e.preventDefault();
+    lastY = t.clientY; lastT = Date.now();
+    if (dragFrom === "dismiss" && dy > 0) {
+      const y = Math.min(220, dy * 0.82);
+      np.classList.add("gesture-dragging");
+      np.style.transform = `translate3d(0, ${y}px, 0)`;
+      np.style.opacity = String(Math.max(0.72, 1 - y / 520));
+    } else if (dragFrom === "stage" && stage) {
+      const y = Math.max(-46, Math.min(46, dy * 0.22));
+      stage.style.transition = "none";
+      stage.style.transform = `translate3d(0, ${y}px, 0)`;
+      stage.style.opacity = String(Math.max(0.72, 1 - Math.abs(y) / 160));
+    }
+  }, { passive: false });
+  const finish = e => {
+    if (!dragFrom) return;
+    const ct = e.changedTouches && e.changedTouches[0];
+    const dy = (ct ? ct.clientY : lastY) - dsy;
+    const dt = Math.max(16, Date.now() - lastT);
+    const velocity = ((ct ? ct.clientY : lastY) - lastY) / dt;
+    const from = dragFrom;
+    dragFrom = ""; dragging = false;
+    np.classList.remove("gesture-dragging");
+    np.style.transition = "transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms var(--ease-out)";
+    stage?.classList.add("gesture-stage-shift");
+    if (stage) { stage.style.transform = ""; stage.style.opacity = ""; }
+    if (from === "dismiss" && dy > 78) {
+      collapseNowPlayingScreen();
+    } else if (from === "stage" && state.playerCenterMode === "lyrics" && dy > 52) {
+      switchPlayerStage("art");
+    } else if (from === "stage" && state.playerCenterMode === "art" && dy < -52) {
+      switchPlayerStage("lyrics");
+    }
+    np.style.opacity = "";
+    if (!np.classList.contains("open")) np.style.transform = "";
+    else setTimeout(() => { np.style.transition = ""; np.style.transform = ""; }, 230);
+    setTimeout(() => stage?.classList.remove("gesture-stage-shift"), 180);
+  };
+  np.addEventListener("touchend", finish, { passive: true });
+  np.addEventListener("touchcancel", finish, { passive: true });
 }
 
 function playFolderTracks(folderPath, shuffle) {

@@ -155,3 +155,14 @@ Implemented the researched Poweramp gesture behavior the user requested:
 - Mini-player horizontal swipe now has two levels: short swipe = previous/next track; longer committed swipe = previous/next album/folder/category.
 - Mini-player swipe down opens the current album/folder/artist context; swipe up still opens Now Playing.
 - Kept strict mini-player collision zones from v1.20/v1.21 to avoid the old time/heart overlap bug.
+
+## v1.27 fluid gesture pass — player minimize, lyrics/artwork, smoother pinch
+
+Researched Poweramp player/list gestures and implemented the next interaction pass:
+- Full player now supports a fluid downward drag from the header/deck to minimize back to the mini-player, with live transform feedback instead of a sudden jump.
+- Artwork gestures now feel more tactile: swipe up on artwork opens lyrics; swipe down on artwork minimizes; left/right still skips tracks.
+- When lyrics are open, a downward swipe on the player stage returns to artwork, making lyrics/artwork feel like two sides of the same panel.
+- Pinch-to-size was rewritten to be lighter: no list re-render during finger movement, just a tiny compositor-only preview scale plus a small List Size HUD.
+- Pinch threshold was reduced slightly and the code now uses one requestAnimationFrame-backed move pipeline instead of duplicate touchmove handlers.
+- On release, the list density changes once and persists; this should avoid lag on large libraries.
+- Kept all previous large-library, folder scan, mini-player collision, category swipe, and playback behavior intact.
