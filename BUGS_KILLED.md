@@ -175,3 +175,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Album detail re-sorts incoming lists through the natural album order pipeline, so context/search opens are stable.
 - Added optional Playback setting: Tap Track Opens Player. It defaults off, preserving current browsing behavior, but can mimic Poweramp-style immediate Now Playing launch.
 - Rebuilt signed APK as versionCode 25 / versionName 1.24.
+
+## v1.25 — human design pass + playback mode chooser
+
+- Removed overproduced/generated-sounding visible copy: no “flagship audio instrument”, “verified zero-emojis”, HAL jargon, or robotic About text.
+- Rewrote settings descriptions to sound simpler, calmer, and more like a finished music app.
+- Default/idle copy now uses plain labels like “Ready” and “Startup recovered.”
+- Added long-press Shuffle/Repeat playback mode sheet with direct choices: shuffle off, shuffle library, shuffle current context, repeat off, repeat all, repeat one.
+- Existing single-tap shuffle/repeat behavior is unchanged.
+- Shuffle/repeat button visuals now restore correctly from saved session state.
+- Rebuilt signed APK as versionCode 26 / versionName 1.25.

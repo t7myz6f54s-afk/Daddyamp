@@ -131,3 +131,14 @@ Implemented low-risk library polish from the roadmap:
 - Long library totals now render as h:mm:ss instead of oversized minute counts.
 - Album detail always sorts with the natural album ordering pipeline even if opened from search/context with an unsorted list.
 - Added optional Playback setting: Tap Track Opens Player. Default remains off to preserve the existing list-browsing behavior; users who want a Poweramp-style immediate Now Playing jump can enable it.
+
+## v1.25 design pass — less generated, more intentional
+
+Implemented a human-facing design/copy pass plus Poweramp-style playback mode affordances:
+- Removed overproduced/generated-sounding product copy from the visible app: no “flagship audio instrument”, “verified zero-emojis”, or HAL/Biquad jargon in About/Specs.
+- Rewrote settings microcopy to sound direct and useful instead of synthetic.
+- Kept the DaddyAmp identity, but made the empty/default labels calmer: “Ready”, “Startup recovered”, and plain audio wording.
+- Added a clean Playback mode sheet opened by long-pressing Shuffle or Repeat.
+- Playback mode sheet exposes Shuffle off, Shuffle library, Shuffle current album/folder/artist context, Repeat off, Repeat all, and Repeat one.
+- Repeat/shuffle state now restores its button visuals after session restore.
+- Changes preserve existing single-tap shuffle/repeat behavior, existing folder scans, library persistence, and mini-player layout fixes.
