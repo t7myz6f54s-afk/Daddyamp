@@ -2744,6 +2744,19 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   .mini-trailing-actions { grid-column: 3; }
 }
 
+
+/* CATEGORY NAVIGATION PASS — Poweramp-style previous/next album-folder controls */
+.category-skip-btn {
+  color: rgba(255,255,255,0.52);
+  background: rgba(255,255,255,0.035);
+}
+.category-skip-btn:active { color: var(--accent); }
+.player-playlist-name { cursor: pointer; user-select: none; }
+.player-playlist-name:active { color: var(--accent); }
+@media (max-width: 380px) {
+  .deck-transport-row .category-skip-btn { display: none; }
+}
+
 /* POWERAMP SEAMLESS REFINEMENT PASS: calmer motion, stronger touch feedback, less clunk */
 .song-catalog-row, .folder-row-item, .folder-root-card, .album-unit-box {
   -webkit-tap-highlight-color: transparent;
@@ -2985,7 +2998,7 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
       </button>
 
       <div class="player-context-center">
-        <div class="player-playlist-name" id="player-context-tag">Playing from Library</div>
+        <div class="player-playlist-name" id="player-context-tag" onclick="openCurrentPlaybackContext()" title="Open current album or folder">Playing from Library</div>
         <div class="player-audio-tech-chip" id="player-specs-chip" onclick="cycleAudioInfoChip()" title="Tap to cycle audio info">
           WAV • 1411 kbps • 44.1 kHz
         </div>
@@ -3091,6 +3104,11 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
           <div class="transport-active-dot"></div>
         </button>
 
+        <!-- Previous Category -->
+        <button class="transport-btn-round category-skip-btn" onclick="executePreviousCategory()" title="Previous album/folder">
+          <svg class="icon icon-md" viewBox="0 0 24 24"><polyline points="11 6 5 12 11 18"/><polyline points="19 6 13 12 19 18"/></svg>
+        </button>
+
         <!-- Previous Track -->
         <button class="transport-btn-round" onclick="executePlayPrevious()" title="Previous">
           <svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
@@ -3104,6 +3122,11 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
         <!-- Next Track -->
         <button class="transport-btn-round" onclick="executePlayNext()" title="Next">
           <svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+        </button>
+
+        <!-- Next Category -->
+        <button class="transport-btn-round category-skip-btn" onclick="executeNextCategory()" title="Next album/folder">
+          <svg class="icon icon-md" viewBox="0 0 24 24"><polyline points="13 6 19 12 13 18"/><polyline points="5 6 11 12 5 18"/></svg>
         </button>
 
         <!-- Repeat Mode -->
@@ -4276,6 +4299,7 @@ function hydrateIdlePlayerFromLibrary() {
   state.currentTime = 0;
   updateTimerDisplays();
   updateMiniDeckMeta();
+  updatePlayerContextUI();
   updateHeartVisuals(song.favorite);
   setAmbientArt(song.artwork || "artwork/default.png", true);
 }
@@ -4285,15 +4309,17 @@ function updateAudioInfoChip() {
   if (!el) return;
   const song = state.songs[state.currentIndex] || {};
   const info = state.audioInfo || {};
-  const mode = state.audioInfoMode % 4;
-  if (mode === 1) el.textContent = `${formatDuration(state.currentTime)} / ${formatDuration(state.duration)} • ${state.songs.length} tracks`;
-  else if (mode === 2) el.textContent = `${song.artist || 'Unknown Artist'} • ${song.album || 'Library'}`;
-  else if (mode === 3) el.textContent = `${info.fileName || (song.docName || 'Audio file')}`;
+  const mode = state.audioInfoMode % 5;
+  const ctx = currentPlaybackContext();
+  if (mode === 1) el.textContent = `${formatDuration(state.currentTime)} / ${formatDuration(state.duration)} • ${ctx.index + 1}/${ctx.total || state.songs.length}`;
+  else if (mode === 2) el.textContent = `${ctx.type} • ${ctx.label} • ${ctx.total || 0} tracks`;
+  else if (mode === 3) el.textContent = `${song.artist || 'Unknown Artist'} • ${song.album || 'Library'}`;
+  else if (mode === 4) el.textContent = `${info.fileName || (song.docName || 'Audio file')}`;
   else el.textContent = `${info.formatTag || 'AUDIO'} • ${info.bitrateText || 'Unknown bitrate'} • ${info.sampleRateText || '44,100 Hz'}`;
 }
 
 function cycleAudioInfoChip() {
-  state.audioInfoMode = (state.audioInfoMode + 1) % 4;
+  state.audioInfoMode = (state.audioInfoMode + 1) % 5;
   updateAudioInfoChip();
   haptic("tap");
 }
@@ -4357,7 +4383,7 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   artImg.src = song.artwork || "artwork/default.png";
   setTimeout(() => { artImg.style.opacity = "1"; }, 60);
 
-  document.getElementById("player-context-tag").textContent = `Playing from ${song.album || 'Library'}`;
+  updatePlayerContextUI();
 
   // Honest Technical Specifications
   const fileName = (song.path || "").split("/").pop() || "Audio Track";
@@ -4408,6 +4434,7 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   retriggerAnim(document.getElementById("mini-meta-artist"), "text-enter");
   updateTimerDisplays();
   updateMiniDeckMeta();
+  updatePlayerContextUI();
   updateHeartVisuals(song.favorite);
 
   if (state.settings.dynamicTheme) {
@@ -4810,7 +4837,7 @@ function updateTimerDisplays() {
   if (elapsedStr !== lastRenderedTimeStr) {
     lastRenderedTimeStr = elapsedStr;
     document.getElementById("player-time-elapsed").textContent = elapsedStr;
-    if (state.audioInfoMode === 1) updateAudioInfoChip();
+    if (state.audioInfoMode === 1 || state.audioInfoMode === 2) updateAudioInfoChip();
 
     const totalBtn = document.getElementById("player-time-remaining");
     if (state.showRemainingTime) {
@@ -6701,6 +6728,122 @@ function resolveSongByID(id) {
 
 function currentSongUri(t) {
   return t ? String(t.path || t.url || "") : "";
+}
+
+function cleanContextLabel(v, fallback) {
+  const s = String(v || "").trim();
+  return s || fallback || "Library";
+}
+
+function songContextKey(song) {
+  if (!song) return "library::all";
+  if (song.source === "folder" && song.rootUri) {
+    return "folder::" + song.rootUri + "::" + cleanContextLabel(song.folderPath, "");
+  }
+  if (song.album) return "album::" + cleanContextLabel(song.album, "Unknown Album") + "::" + cleanContextLabel(song.artist, "Unknown Artist");
+  if (song.artist) return "artist::" + cleanContextLabel(song.artist, "Unknown Artist");
+  return "library::all";
+}
+
+function contextDisplayForSong(song) {
+  if (!song) return { type: "Library", label: "All songs" };
+  if (song.source === "folder" && song.rootUri) {
+    const root = folderRootByUri(song.rootUri);
+    const label = song.folderPath ? dirBaseName(song.folderPath) : (root?.name || "Folder");
+    return { type: "Folder", label };
+  }
+  if (song.album) return { type: "Album", label: song.album };
+  if (song.artist) return { type: "Artist", label: song.artist };
+  return { type: "Library", label: "All songs" };
+}
+
+function contextSortSongs(list) {
+  return [...(list || [])].sort((a, b) => {
+    const da = Number(a.disc || a.discNumber || 0), db = Number(b.disc || b.discNumber || 0);
+    if (da !== db) return da - db;
+    const ta = Number(a.track || a.trackNumber || 0), tb = Number(b.track || b.trackNumber || 0);
+    if (ta !== tb) return ta - tb;
+    return String(a.title || a.docName || "").localeCompare(String(b.title || b.docName || ""), undefined, { numeric: true, sensitivity: "base" });
+  });
+}
+
+function currentPlaybackContext() {
+  const song = state.songs[state.currentIndex];
+  if (!song) return { type: "Library", label: "All songs", songs: [], index: -1, total: 0, duration: 0, key: "library::all" };
+  const key = songContextKey(song);
+  let list = state.songs.filter(s => !s.virtual && songContextKey(s) === key);
+  list = contextSortSongs(list);
+  const idx = list.findIndex(s => currentSongUri(s) === currentSongUri(song));
+  const disp = contextDisplayForSong(song);
+  return { ...disp, songs: list, index: idx, total: list.length, duration: list.reduce((a, c) => a + (c.duration || 0), 0), key };
+}
+
+function updatePlayerContextUI() {
+  const tag = document.getElementById("player-context-tag");
+  if (!tag) return;
+  const ctx = currentPlaybackContext();
+  const count = ctx.total ? `${Math.max(0, ctx.index + 1)}/${ctx.total}` : `0/${state.songs.length || 0}`;
+  tag.textContent = `${ctx.type} • ${ctx.label} • ${count}`;
+  tag.title = `Open ${ctx.type.toLowerCase()} — ${ctx.total || 0} tracks${ctx.duration ? " • " + formatDuration(ctx.duration) : ""}`;
+}
+
+function buildCategoryGroups() {
+  const map = new Map();
+  for (const s of libraryTracks()) {
+    const key = songContextKey(s);
+    if (!map.has(key)) {
+      const disp = contextDisplayForSong(s);
+      map.set(key, { key, ...disp, songs: [] });
+    }
+    map.get(key).songs.push(s);
+  }
+  const groups = Array.from(map.values());
+  groups.forEach(g => { g.songs = contextSortSongs(g.songs); });
+  groups.sort((a, b) => (a.type + a.label).localeCompare(b.type + b.label, undefined, { numeric: true, sensitivity: "base" }));
+  return groups;
+}
+
+function executeCategoryStep(dir) {
+  const cur = state.songs[state.currentIndex];
+  if (!cur) return;
+  const groups = buildCategoryGroups();
+  if (!groups.length) return;
+  const key = songContextKey(cur);
+  let idx = groups.findIndex(g => g.key === key);
+  if (idx < 0) idx = 0;
+  const nextGroup = groups[(idx + dir + groups.length) % groups.length];
+  const first = nextGroup && nextGroup.songs[0];
+  const songIdx = first ? resolveSongIndex(first) : -1;
+  if (songIdx !== -1) {
+    loadTrack(songIdx, true);
+    displayToast(`${nextGroup.type}: ${nextGroup.label}`);
+    haptic("skip");
+  }
+}
+
+function executeNextCategory() { executeCategoryStep(1); }
+function executePreviousCategory() { executeCategoryStep(-1); }
+
+function openCurrentPlaybackContext() {
+  const song = state.songs[state.currentIndex];
+  if (!song) return;
+  collapseNowPlayingScreen();
+  if (song.source === "folder" && song.rootUri) {
+    selectLibraryTab("folders");
+    openFolderScope(song.rootUri, song.folderPath || "");
+    return;
+  }
+  if (song.album) {
+    selectLibraryTab("albums");
+    const list = state.songs.filter(s => !s.virtual && s.album === song.album && (!song.artist || s.artist === song.artist));
+    if (list.length) renderAlbumDetailView(song.album, contextSortSongs(list));
+    return;
+  }
+  if (song.artist) {
+    selectLibraryTab("artists");
+  } else {
+    selectLibraryTab("tracks");
+  }
 }
 
 // After ANY rebuild/reorder of state.songs: move currentIndex to the SAME

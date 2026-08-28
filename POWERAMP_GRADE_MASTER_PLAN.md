@@ -96,3 +96,18 @@ Fix remaining mini-player clunk:
 - decorative meter is optional and disappears first on narrow screens.
 - heart disappears before play button on narrow screens.
 - mini-player should feel like a tiny hardware deck: art, title, artist, time pill, play.
+
+## v1.22 Phase 2 start — category intelligence
+
+Implemented the first Poweramp-style category layer safely:
+- Full player now has previous/next category controls around previous/next track.
+- Category means folder when the song comes from a folder scan, otherwise album, then artist/library fallback.
+- Header context is now actionable and shows `Type • Name • current/total`, e.g. `Album • Meteora • 3/13`.
+- Tapping the context label jumps back to the current folder or album instead of dumping the user into a generic library.
+- Audio info chip includes context-aware track counter modes.
+
+Next in Phase 2:
+- Add artist detail context jump.
+- Add album/folder total duration chips in more surfaces.
+- Add natural sort using disc/track metadata from native scanner when available.
+- Add setting for list tap behavior: play only vs play and open player.

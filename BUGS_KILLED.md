@@ -144,3 +144,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Hidden duplicate inline time from the metadata kicker so it cannot run into the heart/play rail.
 - Added responsive hierarchy: meter hides first, then heart/next yields on narrow devices, while play remains protected.
 - Rebuilt signed APK as versionCode 22 / versionName 1.21.
+
+## v1.22 — Poweramp category intelligence phase 1
+
+- Added Poweramp-style previous/next category buttons in the full player. They step by current album for library/device tracks and by current folder for folder-scanned tracks.
+- Upgraded the player context label to `Type • Name • current/total` instead of generic `Playing from Album`.
+- Context label is now actionable: tap it to jump back to the current album/folder context.
+- Added context-aware track counter information to the cycling audio chip.
+- Category navigation uses stable track identity and sorted context groups; no index guessing.
+- Preserved startup, playback, library persistence, and mini-player fixes.
+- Rebuilt signed APK as versionCode 23 / versionName 1.22.
