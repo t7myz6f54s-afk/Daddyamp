@@ -314,3 +314,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Strengthened the album-art colour wash so the player feels more “in your face” again: stronger accent ambient and stronger per-cover scrim tint.
 - Revalidated old bad settings (`line`, dynamic palette off, Speed) upgrading into the new build: settings recovered to Wave + adaptive palette + Auto, waveform path rendered, artwork ambience applied, no JS errors.
 - Rebuilt signed APK as versionCode 37 / versionName 1.36.
+
+## v1.37 — visual richness + interface glitch cleanup continuation
+
+- Made the restored waveform more visible by giving the scrubber a taller 44px canvas instead of the thinner 36px strip.
+- Strengthened the player album-colour layer so adaptive cover colours feel vivid again instead of barely tinted.
+- Continued interface glitch cleanup by escaping remaining album/folder/playlist artwork URLs and visible metadata in playlist/detail/history surfaces.
+- Large playlist editing no longer mounts thousands of rows at once: Performance mode shows a smooth editable first window and a footer for the hidden remainder.
+- Playlist row insertion now uses a DocumentFragment to reduce layout churn.
+- Revalidated a 5,000-track broken-settings upgrade: Wave restored, Dynamic Artwork Palette restored, Speed reset to Auto, waveform draw path executed, artwork ambience applied, unsafe metadata escaped, 120 playlist rows capped, and no JS errors.
+- Rebuilt signed APK as versionCode 38 / versionName 1.37.

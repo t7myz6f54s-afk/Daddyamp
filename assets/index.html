@@ -1172,7 +1172,7 @@ body, html {
 
 #poweramp-canvas-scrubber {
   width: 100%;
-  height: 36px;
+  height: 44px;
   cursor: pointer;
   touch-action: none;
 }
@@ -2414,7 +2414,7 @@ html.reduce-motion #player-artwork-img { animation: none !important; }
   position: absolute;
   inset: 0;
   background: var(--scrim-tint);
-  opacity: 0.45;
+  opacity: 0.62;
   transition: background-color 0.6s var(--ease-out);
 }
 .player-ambient-layer .ambient-vignette {
@@ -4189,7 +4189,7 @@ let state = {
 
 let cachedCanvas = {
   width: 320,
-  height: 36,
+  height: 44,
   lastRenderedBarIdx: -1
 };
 
@@ -6707,7 +6707,7 @@ function renderGenreCards() {
     const first = e.songs[0] || {};
     return `
       <div class="album-thumb-container">
-        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
+        <img src="${escAttr(first.artwork || 'artwork/default.png')}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text">${escHtml(e.name)}</div>
       <div class="album-artist-text">${e.songs.length} tracks • ${formatDuration(e.duration || sumSongDuration(e.songs))}${e.inferred ? ` • ${e.inferred} inferred` : ""}</div>`;
@@ -7022,7 +7022,7 @@ function renderFolderBrowser() {
       </div>
       <div class="drilldown-header-card">
         <div class="drilldown-art-box">
-          <img src="${first.artwork || 'artwork/default.png'}" alt="${escHtml(dirBaseName(state.folderPath))}">
+          <img src="${escAttr(first.artwork || 'artwork/default.png')}" alt="${escAttr(dirBaseName(state.folderPath))}">
         </div>
         <div class="drilldown-info-col">
           <div class="drilldown-main-title">${escHtml(dirBaseName(state.folderPath))}</div>
@@ -7067,7 +7067,7 @@ function renderFolderBrowser() {
     const totalSecs = entries.reduce((acc, cur) => acc + (cur.song.duration || 0), 0);
     return `
       <div class="album-thumb-container">
-        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(dirBaseName(path))}" loading="lazy" decoding="async">
+        <img src="${escAttr(first.artwork || 'artwork/default.png')}" class="album-thumb-image" alt="${escAttr(dirBaseName(path))}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text">${escHtml(dirBaseName(path))}</div>
       <div class="album-artist-text">${entries.length} tracks • ${formatDuration(totalSecs)}</div>`;
@@ -7148,7 +7148,7 @@ function renderPlaylistsView() {
     card.style.cursor = "pointer";
     const mosaic = covers.length >= 2
       ? `<div class="playlist-mosaic">${covers.map(c => `<img src="${c}" alt="">`).join("")}</div>`
-      : `<div class="album-thumb-container"><img src="${covers[0] || 'artwork/default.png'}" class="album-thumb-image" alt="${escHtml(pl.name)}"></div>`;
+      : `<div class="album-thumb-container"><img src="${escAttr(covers[0] || 'artwork/default.png')}" class="album-thumb-image" alt="${escAttr(pl.name)}"></div>`;
     card.innerHTML = `${mosaic}<div class="album-title-text">${escHtml(pl.name)}</div><div class="album-artist-text">${songs.length} tracks</div>`;
     card.onclick = () => { state.openPlaylistId = pl.id; renderPlaylistDetail(pl.id); };
     grid.appendChild(card);
@@ -7171,7 +7171,7 @@ function renderPlaylistDetail(plId) {
       <button class="btn-import-header" style="height: 28px; padding: 0 10px; font-size: 11px; color: #FF5A5A;" onclick="confirmDeletePlaylist('${pl.id}')">Delete</button>
     </div>
     <div class="drilldown-header-card">
-      <div class="drilldown-art-box"><img src="${first.artwork || 'artwork/default.png'}" alt="${escHtml(pl.name)}"></div>
+      <div class="drilldown-art-box"><img src="${escAttr(first.artwork || 'artwork/default.png')}" alt="${escAttr(pl.name)}"></div>
       <div class="drilldown-info-col">
         <div class="drilldown-main-title">${escHtml(pl.name)}</div>
         <div class="drilldown-sub-text">${songs.length} tracks • ${formatDuration(totalSecs)}</div>
@@ -7195,14 +7195,17 @@ function renderPlaylistDetail(plId) {
   }
   const listEl = document.createElement("div");
   listEl.className = "song-rows-catalog";
-  songs.forEach((sd, i) => {
+  const playlistRenderLimit = isPerformanceMode() ? 120 : 300;
+  const visibleSongs = songs.slice(0, playlistRenderLimit);
+  const frag = document.createDocumentFragment();
+  visibleSongs.forEach((sd, i) => {
     const row = document.createElement("div");
     row.className = "song-catalog-row";
     row.innerHTML = `
-      <div class="row-artwork-frame"><img src="${sd.artwork || 'artwork/default.png'}" class="row-artwork-img" alt="${sd.title}"></div>
+      <div class="row-artwork-frame"><img src="${escAttr(sd.artwork || 'artwork/default.png')}" class="row-artwork-img" alt="${escAttr(sd.title || 'Track')}"></div>
       <div class="row-meta-content">
-        <div class="row-title-line">${sd.title}</div>
-        <div class="row-details-line"><span>${sd.artist}</span><span>•</span><span>${formatDuration(sd.duration)}</span></div>
+        <div class="row-title-line">${escHtml(sd.title || 'Unknown Track')}</div>
+        <div class="row-details-line"><span>${escHtml(sd.artist || 'Unknown Artist')}</span><span>•</span><span>${formatDuration(sd.duration)}</span></div>
       </div>
       <div style="display: flex; gap: 4px; align-items: center;" onclick="event.stopPropagation()">
         <button class="btn-action-tap" style="width: 28px; height: 28px;" onclick="movePlaylistTrack('${pl.id}', ${i}, -1)" title="Move Up"><svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg></button>
@@ -7215,9 +7218,16 @@ function renderPlaylistDetail(plId) {
       if (idx !== -1) loadTrack(idx, true);
       state.queue = songs.slice(i + 1);
     };
-    listEl.appendChild(row);
+    frag.appendChild(row);
   });
+  listEl.appendChild(frag);
   holder.appendChild(listEl);
+  if (songs.length > visibleSongs.length) {
+    const note = document.createElement("div");
+    note.className = "catalog-footer-note";
+    note.textContent = `${songs.length - visibleSongs.length} more playlist tracks hidden for smooth editing`;
+    holder.appendChild(note);
+  }
 }
 
 function movePlaylistTrack(plId, idx, delta) {
@@ -7505,7 +7515,7 @@ function renderHistoryTab() {
     row.style.cursor = "pointer";
     row.innerHTML = `
       <div class="row-artwork-frame">
-        <img src="${(sd && sd.artwork) || 'artwork/default.png'}" class="row-artwork-img" alt="${escHtml(h.title)}">
+        <img src="${escAttr((sd && sd.artwork) || 'artwork/default.png')}" class="row-artwork-img" alt="${escAttr(h.title || 'Track')}">
       </div>
       <div class="row-meta-content">
         <div class="row-title-line">${escHtml(h.title)}</div>
@@ -7517,8 +7527,9 @@ function renderHistoryTab() {
       </div>
     `;
     row.onclick = () => playHistoryEntry(h.id);
-    listEl.appendChild(row);
+    frag.appendChild(row);
   });
+  listEl.appendChild(frag);
   holder.appendChild(listEl);
 }
 
@@ -9095,7 +9106,7 @@ function buildSongRow(s, rowIndex) {
   if (!isPerformanceMode()) row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
 
   row.innerHTML = (opts && opts.leadHtml ? opts.leadHtml(s, rowIndex) : songRowLeadHtml(s, rowIndex))
-    + (opts && opts.noAlbumLine ? `<div class="row-meta-content"><div class="row-title-line">${escHtml(s.title || "Unknown Track")}</div><div class="row-details-line"><span>${s.artist}</span></div></div>` : "")
+    + (opts && opts.noAlbumLine ? `<div class="row-meta-content"><div class="row-title-line">${escHtml(s.title || "Unknown Track")}</div><div class="row-details-line"><span>${escHtml(s.artist || "Unknown Artist")}</span></div></div>` : "")
     + songRowTrailingHtml(s);
 
   row.onclick = () => {
@@ -9246,7 +9257,7 @@ function renderAlbumCards() {
     const first = e.songs[0];
     return `
       <div class="album-thumb-container">
-        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
+        <img src="${escAttr(first.artwork || 'artwork/default.png')}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text">${escHtml(e.name)}</div>
       <div class="album-artist-text">${escHtml(first.artist)} • ${e.songs.length} tracks • ${formatDuration(e.duration || sumSongDuration(e.songs))}</div>`;
@@ -9273,7 +9284,7 @@ function renderAlbumDetailView(albumName, list) {
     </div>
     <div class="drilldown-header-card">
       <div class="drilldown-art-box">
-        <img src="${first.artwork || 'artwork/default.png'}" alt="${escAttr(albumName)}">
+        <img src="${escAttr(first.artwork || 'artwork/default.png')}" alt="${escAttr(albumName)}">
       </div>
       <div class="drilldown-info-col">
         <div class="drilldown-main-title">${escHtml(albumName)}</div>
@@ -9325,7 +9336,7 @@ function renderArtistCards() {
     const first = e.songs[0];
     return `
       <div class="album-thumb-container" style="border-radius: 50%;">
-        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
+        <img src="${escAttr(first.artwork || 'artwork/default.png')}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text" style="text-align: center;">${escHtml(e.name)}</div>
       <div class="album-artist-text" style="text-align: center;">${e.songs.length} songs • ${e.albumCount || new Set(e.songs.map(s => s.album || "Unknown Album")).size} albums • ${formatDuration(e.duration || sumSongDuration(e.songs))}</div>`;
@@ -9354,7 +9365,7 @@ function renderArtistDetailView(artistName, list) {
     </div>
     <div class="drilldown-header-card">
       <div class="drilldown-art-box" style="border-radius: 50%;">
-        <img src="${first.artwork || 'artwork/default.png'}" alt="${escAttr(artistName)}">
+        <img src="${escAttr(first.artwork || 'artwork/default.png')}" alt="${escAttr(artistName)}">
       </div>
       <div class="drilldown-info-col">
         <div class="drilldown-main-title">${escHtml(artistName)}</div>

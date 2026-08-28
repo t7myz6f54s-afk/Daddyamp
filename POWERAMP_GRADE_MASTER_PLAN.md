@@ -268,3 +268,11 @@ Added a non-regression rule in code and behavior: smoothness work must preserve 
 ## v1.36 visual recovery release
 
 Added a one-time recovery for anyone who installed the over-optimized builds: DaddyAmp will restore Wave seekbar, Dynamic Artwork Palette, and Auto performance profile automatically. This protects the app's visual identity while keeping all invisible lag reductions.
+
+## v1.37 fluid visual continuation
+
+Further corrected the visual regression without giving back the old lag:
+- Waveform is taller and more visible.
+- Album-art colour atmosphere is stronger.
+- More metadata/artwork paths are escaped to prevent interface glitches from unusual tags.
+- Large playlist detail is capped and fragment-rendered in Performance mode so queue/list smoothness work extends to playlists too.
