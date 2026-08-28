@@ -142,3 +142,16 @@ Implemented a human-facing design/copy pass plus Poweramp-style playback mode af
 - Playback mode sheet exposes Shuffle off, Shuffle library, Shuffle current album/folder/artist context, Repeat off, Repeat all, and Repeat one.
 - Repeat/shuffle state now restores its button visuals after session restore.
 - Changes preserve existing single-tap shuffle/repeat behavior, existing folder scans, library persistence, and mini-player layout fixes.
+
+## v1.26 Poweramp gesture pass — intelligent mini-player + pinch list sizes
+
+Implemented the researched Poweramp gesture behavior the user requested:
+- Added pinch-to-zoom list density control with four levels: Text, Compact, Comfort, Large.
+- Pinching inward makes song lists denser; pinching outward makes rows/cards larger.
+- Added a visible List Size control in Look & Feel so the same behavior is discoverable without guessing the gesture.
+- List density persists in settings and applies on restart.
+- Album/artist/folder grids also respond to density so browse views feel like Poweramp List Options/View As behavior.
+- Mini-player is more context-aware: state line now shows current album/folder/artist position, with the context label kept separate from title/artist/time zones.
+- Mini-player horizontal swipe now has two levels: short swipe = previous/next track; longer committed swipe = previous/next album/folder/category.
+- Mini-player swipe down opens the current album/folder/artist context; swipe up still opens Now Playing.
+- Kept strict mini-player collision zones from v1.20/v1.21 to avoid the old time/heart overlap bug.

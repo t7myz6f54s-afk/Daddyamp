@@ -2691,6 +2691,39 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
 }
 
 
+
+/* Pinch-size library views: Poweramp-style list zoom */
+html.list-size-text .row-artwork-frame { display: none; }
+html.list-size-text .song-catalog-row { min-height: 42px; padding: 6px 14px; gap: 8px; }
+html.list-size-text .row-title-line { font-size: 13px; }
+html.list-size-text .row-details-line { font-size: 10px; }
+html.list-size-text .row-trailing-group .btn-inline-heart { display: none; }
+html.list-size-compact .song-catalog-row { min-height: 50px; padding: 6px 14px; gap: 10px; }
+html.list-size-compact .row-artwork-frame { width: 34px; height: 34px; }
+html.list-size-compact .row-title-line { font-size: 13px; }
+html.list-size-compact .row-details-line { font-size: 10.5px; }
+html.list-size-comfort .song-catalog-row { min-height: 60px; }
+html.list-size-large .song-catalog-row { min-height: 76px; padding: 10px 14px; gap: 14px; }
+html.list-size-large .row-artwork-frame { width: 58px; height: 58px; border-radius: 10px; }
+html.list-size-large .row-title-line { font-size: 15.5px; }
+html.list-size-large .row-details-line { font-size: 11.5px; }
+html.list-size-text .album-cards-grid { grid-template-columns: 1fr 1fr; }
+html.list-size-compact .album-cards-grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+html.list-size-large .album-cards-grid { grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); }
+html.list-size-large .album-thumb-container { aspect-ratio: 1 / 1; }
+.mini-context-chip {
+  display: none;
+  margin-left: 6px;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255,255,255,0.44);
+}
+html.mini-has-context .mini-context-chip { display: inline; }
+#docked-mini-player.mini-gesture-category { border-color: var(--border-active); box-shadow: 0 -12px 40px rgba(0,0,0,0.55), 0 0 0 1px var(--accent-soft), inset 0 1px 0 rgba(255,255,255,0.09); }
+#docked-mini-player.mini-gesture-track { border-color: rgba(255,255,255,0.18); }
+
 /* v1.21 Designer correction: strict mini-player zones, no metadata/control collision */
 #docked-mini-player {
   display: grid;
@@ -2928,6 +2961,7 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
         <span id="mini-state-label">Ready</span>
         <span class="mini-dot-sep">•</span>
         <span id="mini-time-label">0:00</span>
+        <span class="mini-context-chip" id="mini-context-chip"></span>
       </div>
       <div class="mini-title-line" id="mini-meta-title">No track selected</div>
       <div class="mini-artist-line" id="mini-meta-artist">Ready <span class="mini-format-chip" id="mini-format-chip"></span></div>
@@ -2954,7 +2988,7 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
     <!-- Swipe hint (shows briefly on first interaction) -->
     <div class="mini-swipe-hint" id="mini-swipe-hint">
       <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-      <span>swipe tracks • swipe up player</span>
+      <span>short swipe track • long swipe album/folder • up player</span>
       <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
   </div>
@@ -3529,6 +3563,13 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
           <div id="seekstyle-pill-row" style="display: flex; gap: 6px; padding: 0 14px 12px 14px;"></div>
           <div class="setting-card-item">
             <div>
+              <div style="font-weight: 650; font-size: 13px;">List Size</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">You can also pinch in or out in lists</div>
+            </div>
+          </div>
+          <div id="listdensity-pill-row" style="display: flex; gap: 6px; padding: 0 14px 12px 14px; flex-wrap: wrap;"></div>
+          <div class="setting-card-item">
+            <div>
               <div style="font-weight: 650; font-size: 13px;">Background Blur</div>
               <div style="font-size: 11px; color: var(--text-tertiary);">How softly cover art fills the background</div>
             </div>
@@ -3815,6 +3856,7 @@ let state = {
     lrclibFetch: true,
     autoQueue: true,
     listTapOpenPlayer: false,
+    listDensity: "comfort",
     tempo: 1.0,
     theme: "abyss",
     crossfadeSec: 0,
@@ -3896,12 +3938,14 @@ window.addEventListener("DOMContentLoaded", () => {
   loadPersistedData();
   refreshBadges();
   syncFluidSettingsUI();
+  applyListDensity(state.settings.listDensity || "comfort", false);
   selectLibraryTab("tracks");
   hydrateIdlePlayerFromLibrary();
   syncSystemVolumeFromAndroid();
   initFolderSystem();
   attachCoverGestures();
   attachCatalogLoadMore();
+  attachLibraryPinchZoom();
   armTransportHoldMenus();
   armArtFallback();
 
@@ -4923,8 +4967,17 @@ function updateMiniDeckMeta() {
   const stateEl = document.getElementById("mini-state-label");
   const timeEl = document.getElementById("mini-time-label");
   const pillEl = document.getElementById("mini-time-pill");
+  const contextChip = document.getElementById("mini-context-chip");
+  const song = state.songs[state.currentIndex];
+  const ctx = song ? currentPlaybackContext() : null;
+  document.documentElement.classList.toggle("mini-has-context", !!(ctx && ctx.total));
   if (stateEl) {
-    stateEl.textContent = state.isPlaying ? "Playing" : (state.songs[state.currentIndex] ? "Paused" : "Ready");
+    if (ctx && ctx.total) stateEl.textContent = `${ctx.type} ${Math.max(0, ctx.index + 1)}/${ctx.total}`;
+    else stateEl.textContent = state.isPlaying ? "Playing" : (song ? "Paused" : "Ready");
+  }
+  if (contextChip) {
+    contextChip.textContent = ctx && ctx.label ? ctx.label : "";
+    contextChip.title = ctx && ctx.label ? `${ctx.type} — ${ctx.label}` : "";
   }
   if (timeEl) {
     const left = formatDuration(state.currentTime || 0);
@@ -6647,6 +6700,77 @@ function heroArtCollapse() {
 }
 
 // --- Look & Feel ---
+const LIST_DENSITY_LEVELS = ["text", "compact", "comfort", "large"];
+const LIST_DENSITY_LABELS = { text: "Text", compact: "Compact", comfort: "Comfort", large: "Large" };
+
+function applyListDensity(mode, toast = true) {
+  const clean = LIST_DENSITY_LEVELS.includes(mode) ? mode : "comfort";
+  state.settings.listDensity = clean;
+  document.documentElement.classList.remove("list-size-text", "list-size-compact", "list-size-comfort", "list-size-large");
+  document.documentElement.classList.add("list-size-" + clean);
+  renderListDensityPills();
+  if (toast) displayToast(`List size: ${LIST_DENSITY_LABELS[clean]}`);
+  persistState();
+}
+
+function zoomListDensity(direction) {
+  const cur = state.settings.listDensity || "comfort";
+  let idx = LIST_DENSITY_LEVELS.indexOf(cur);
+  if (idx < 0) idx = 2;
+  idx = Math.max(0, Math.min(LIST_DENSITY_LEVELS.length - 1, idx + direction));
+  if (LIST_DENSITY_LEVELS[idx] !== cur) applyListDensity(LIST_DENSITY_LEVELS[idx], true);
+  else displayToast(idx === 0 ? "Smallest list size" : "Largest list size");
+}
+
+function renderListDensityPills() {
+  const row = document.getElementById("listdensity-pill-row");
+  if (!row) return;
+  row.innerHTML = "";
+  LIST_DENSITY_LEVELS.forEach(v => {
+    const b = document.createElement("button");
+    b.className = "viz-mode-pill" + ((state.settings.listDensity || "comfort") === v ? " active" : "");
+    b.textContent = LIST_DENSITY_LABELS[v];
+    b.onclick = () => applyListDensity(v, true);
+    row.appendChild(b);
+  });
+}
+
+let listPinchStartDistance = 0;
+let listPinchActive = false;
+function pinchDistance(touches) {
+  if (!touches || touches.length < 2) return 0;
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.hypot(dx, dy);
+}
+function attachLibraryPinchZoom() {
+  const sc = document.getElementById("library-scroll-container");
+  if (!sc || sc.dataset.pinchZoomArmed) return;
+  sc.dataset.pinchZoomArmed = "1";
+  sc.addEventListener("touchstart", e => {
+    if (e.touches && e.touches.length === 2) {
+      listPinchStartDistance = pinchDistance(e.touches);
+      listPinchActive = listPinchStartDistance > 0;
+    }
+  }, { passive: true });
+  sc.addEventListener("touchmove", e => {
+    if (listPinchActive && e.touches && e.touches.length === 2) e.preventDefault();
+  }, { passive: false });
+  sc.addEventListener("touchend", e => {
+    if (!listPinchActive) return;
+    const endDistance = e.touches && e.touches.length >= 2 ? pinchDistance(e.touches) : 0;
+    const changed = endDistance || attachLibraryPinchZoom._lastDistance || 0;
+    const delta = changed - listPinchStartDistance;
+    if (Math.abs(delta) > 34) zoomListDensity(delta > 0 ? 1 : -1);
+    listPinchActive = false;
+    listPinchStartDistance = 0;
+    attachLibraryPinchZoom._lastDistance = 0;
+  }, { passive: true });
+  sc.addEventListener("touchmove", e => {
+    if (listPinchActive && e.touches && e.touches.length === 2) attachLibraryPinchZoom._lastDistance = pinchDistance(e.touches);
+  }, { passive: true });
+}
+
 function applySeekStyle(style) {
   state.settings.seekStyle = (style === "line") ? "line" : "wave";
   saveAppOption("seekStyle", state.settings.seekStyle);
@@ -6699,6 +6823,7 @@ function toggleReduceMotion() {
 
 function syncFluidSettingsUI() {
   renderSeekStylePills();
+  renderListDensityPills();
   renderBlurPills();
   applyReduceMotionClass();
   const rm = document.getElementById("toggle-reduce-motion");
@@ -7680,6 +7805,7 @@ function showMenuSheet() {
   dismissAllSheets();
   renderMusicFoldersSettings();
   syncPlaybackSettingsUI();
+  syncFluidSettingsUI();
   document.getElementById("sheet-mask-settings").classList.add("open");
 }
 
@@ -8446,6 +8572,7 @@ function showSettingsSheet() {
   dismissAllSheets();
   renderMusicFoldersSettings();
   syncPlaybackSettingsUI();
+  syncFluidSettingsUI();
   document.getElementById("sheet-mask-settings").classList.add("open");
 }
 
@@ -8681,6 +8808,7 @@ let miniSwipeTracking = false;
 let miniSwipeAxis = "";
 let miniSwipeAccumDelta = 0;
 const MINI_SWIPE_THRESHOLD = 55;
+const MINI_CATEGORY_SWIPE_THRESHOLD = 132;
 
 function miniSwipeStart(e) {
   const touch = e.touches ? e.touches[0] : e;
@@ -8711,8 +8839,13 @@ function miniSwipeMove(e) {
       if (player) player.style.transform = `translateY(${clampedY}px) scale(${dy < 0 ? 1.006 : 0.996})`;
     } else {
       miniSwipeAccumDelta = dx;
-      const clamped = Math.max(-55, Math.min(55, dx * 0.35));
-      if (player) player.style.transform = `translateX(${clamped}px)`;
+      const isCategoryPull = Math.abs(dx) > MINI_CATEGORY_SWIPE_THRESHOLD;
+      const clamped = Math.max(-72, Math.min(72, dx * 0.35));
+      if (player) {
+        player.style.transform = `translateX(${clamped}px) scale(${isCategoryPull ? 1.012 : 1})`;
+        player.classList.toggle("mini-gesture-category", isCategoryPull);
+        player.classList.toggle("mini-gesture-track", !isCategoryPull && Math.abs(dx) > MINI_SWIPE_THRESHOLD);
+      }
     }
     if (player) player.style.transition = "none";
     
@@ -8732,12 +8865,18 @@ function miniSwipeEnd(e) {
   if (player) {
     player.style.transition = "transform 0.18s ease-out";
     player.style.transform = "";
+    player.classList.remove("mini-gesture-category", "mini-gesture-track");
     setTimeout(() => { player.style.transition = ""; }, 200);
   }
   
   if (miniSwipeTracking) {
     if (miniSwipeAxis === "y" && miniSwipeAccumDelta < -38) {
       expandNowPlayingScreen();
+    } else if (miniSwipeAxis === "y" && miniSwipeAccumDelta > 42) {
+      openCurrentPlaybackContext();
+    } else if (miniSwipeAxis !== "y" && Math.abs(miniSwipeAccumDelta) > MINI_CATEGORY_SWIPE_THRESHOLD) {
+      if (miniSwipeAccumDelta < 0) executeNextCategory();
+      else executePreviousCategory();
     } else if (miniSwipeAxis !== "y" && Math.abs(miniSwipeAccumDelta) > MINI_SWIPE_THRESHOLD) {
       if (miniSwipeAccumDelta < 0) executePlayNext();
       else executePlayPrevious();

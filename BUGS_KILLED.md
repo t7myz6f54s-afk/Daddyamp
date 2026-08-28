@@ -185,3 +185,16 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Existing single-tap shuffle/repeat behavior is unchanged.
 - Shuffle/repeat button visuals now restore correctly from saved session state.
 - Rebuilt signed APK as versionCode 26 / versionName 1.25.
+
+## v1.26 — intelligent mini-player + pinch list sizes
+
+- Added Poweramp-style pinch-to-zoom list sizing: Text, Compact, Comfort, and Large.
+- Pinch inward makes lists denser; pinch outward enlarges song rows/cards.
+- Added Look & Feel > List Size pills so the feature is discoverable without knowing the gesture.
+- List size persists and is applied on restart.
+- Album/artist/folder grids also respond to list density.
+- Mini-player now shows current playback context position, e.g. Album 3/12, with a small context label.
+- Mini-player short horizontal swipe skips tracks; longer horizontal swipe skips album/folder/category.
+- Mini-player swipe down opens the current context; swipe up still opens Now Playing.
+- Preserved strict mini-player zones so time/heart/action collision stays fixed.
+- Rebuilt signed APK as versionCode 27 / versionName 1.26.
