@@ -178,3 +178,16 @@ Implemented the major Poweramp-style navigation layer requested by the user:
 - Added real Genre browsing: genre grid, genre detail view, play genre, and shuffle genre.
 - Kept existing subnav tabs intact so older navigation muscle memory still works.
 - Preserved mini-player, player gestures, pinch list size, folder scans, refresh, persistence, and category skip behavior.
+
+## v1.29 hotfix/performance update — instant Library Home portal
+
+Fixed the user's reported portal lag/unusable swipe behavior:
+- Removed all heavy synchronous work from opening the swipe-left Library Home portal.
+- Portal is now prebuilt during idle time and opens immediately from cached 10-card DOM.
+- Counts/genre/folder/history metrics update asynchronously after the panel is already visible, instead of blocking the gesture.
+- Replaced open-time genre indexing and folder indexing with a tiny cached metric snapshot.
+- Swipe-left now gives live follow-your-finger portal feedback as soon as horizontal intent is detected.
+- Lowered the open threshold so a normal, casual swipe opens the portal reliably.
+- Reduced expensive visual effects during the portal transition: lighter shadows, shorter stagger, containment, and will-change/backface layer hints.
+- Added Android back handling for the portal.
+- 10k-track JSDOM performance smoke: openLibraryPortal synchronous path dropped to ~1 ms after priming; portal still renders 10 cards and updates counts correctly.

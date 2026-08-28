@@ -2708,7 +2708,10 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   transition: transform 360ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms var(--ease-out);
   overflow: hidden;
   border-left: 1px solid var(--border-subtle);
-  box-shadow: -22px 0 60px rgba(0,0,0,0.42);
+  box-shadow: -14px 0 36px rgba(0,0,0,0.34);
+  contain: layout paint style;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 #library-category-portal.open {
   transform: translate3d(0, 0, 0);
@@ -2732,7 +2735,7 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
     linear-gradient(135deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)),
     radial-gradient(90% 120% at 100% 0%, var(--accent-soft), transparent 60%);
   border: 1px solid rgba(255,255,255,0.11);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 18px 42px rgba(0,0,0,0.25);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 10px 24px rgba(0,0,0,0.20);
   margin-bottom: 12px;
 }
 .portal-kicker { font-size: 10px; color: var(--accent); font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
@@ -2776,7 +2779,9 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   cursor: pointer;
   transform: translateZ(0);
   transition: transform 150ms var(--ease-out), border-color 150ms var(--ease-out), background 150ms var(--ease-out);
-  animation: portalCardIn 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: portalCardIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  contain: layout paint style;
+  backface-visibility: hidden;
 }
 .portal-category-card:active { transform: scale(0.975); }
 .portal-category-card:hover { border-color: var(--border-active); }
@@ -2797,8 +2802,8 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   border-radius: 18px;
   border: 1px solid rgba(255,255,255,0.095);
   background: rgba(8,9,12,0.82);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   padding: 10px 12px;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
 }
@@ -2855,8 +2860,8 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   border: 1px solid var(--border-medium);
   color: var(--text-pure);
   box-shadow: 0 12px 30px rgba(0,0,0,0.38);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.04em;
@@ -4148,6 +4153,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   loadPersistedData();
   refreshBadges();
+  primeLibraryPortal();
   syncFluidSettingsUI();
   applyListDensity(state.settings.listDensity || "comfort", false);
   selectLibraryTab("tracks");
@@ -4207,7 +4213,10 @@ window.addEventListener("DOMContentLoaded", () => {
 /* ---------------------------------------------- scale caches (10k+ tracks) -- */
 // Bumped every time state.songs is replaced/mutated so memoized indexes know
 // when to recompute. Everything below is O(n) once per change, O(1) after.
-function bumpSongsRev() { state.songsRev = (state.songsRev || 0) + 1; }
+function bumpSongsRev() {
+  state.songsRev = (state.songsRev || 0) + 1;
+  if (typeof schedulePortalMetricsRefresh === "function") schedulePortalMetricsRefresh();
+}
 
 let _libTracks = { rev: -1, list: [] };
 function libraryTracks() {
@@ -4364,6 +4373,7 @@ function refreshBadges() {
 
   document.getElementById("summary-meta-line").textContent = `${_badges.tracks} SONGS • DADDYAMP LOCAL LIBRARY`;
   document.getElementById("label-quick-meta").textContent = `${_badges.tracks} TRACKS AVAILABLE`;
+  if (typeof updatePortalCountsOnly === "function" && _portalPrimed) updatePortalCountsOnly();
 }
 
 /* =========================================================================
@@ -6059,60 +6069,130 @@ function portalIcon(kind) {
   return icons[kind] || icons.songs;
 }
 
+let _portalMetrics = { rev: -1, genreCount: 0, historyUnique: 0, foldersCount: 0, totalTracks: 0 };
+let _portalPrimed = false;
+let _portalMetricsScheduled = false;
+
+function portalMetricSnapshot() {
+  // This is intentionally cheap: never build albums/artists/genres here.
+  if (_portalMetrics.rev !== state.songsRev && !_portalMetricsScheduled) schedulePortalMetricsRefresh();
+  return _portalMetrics;
+}
+
+function schedulePortalMetricsRefresh() {
+  if (_portalMetricsScheduled) return;
+  _portalMetricsScheduled = true;
+  const run = () => {
+    try {
+      const genreSet = new Set();
+      const histSet = new Set();
+      let folders = 0;
+      const folderSet = new Set();
+      for (const sd of state.songs) {
+        if (sd.virtual) continue;
+        if (sd.genre && sd.genre !== "Folder Audio") genreSet.add(sd.genre);
+        if (sd.source === "folder") folderSet.add((sd.rootUri || "") + "::" + (sd.folderPath || ""));
+      }
+      if (folderState && folderState.roots && folderState.roots.length) folders = folderState.roots.length;
+      else folders = folderSet.size;
+      (state.listenHistory || []).forEach(h => { if (h && h.id != null) histSet.add(h.id); });
+      _portalMetrics = {
+        rev: state.songsRev,
+        genreCount: genreSet.size,
+        historyUnique: histSet.size,
+        foldersCount: folders,
+        totalTracks: libraryTracks().length
+      };
+    } catch (e) {}
+    _portalMetricsScheduled = false;
+    updatePortalCountsOnly();
+  };
+  if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 900 });
+  else setTimeout(run, 80);
+}
+
 function buildPortalCategories() {
-  const genres = genreIndexEntries();
-  const folders = folderBadgeCount();
-  const historyUnique = new Set((state.listenHistory || []).map(h => h.id)).size;
+  const m = portalMetricSnapshot();
   const now = state.songs[state.currentIndex];
   return [
-    { key: "tracks", icon: "songs", title: "All Songs", count: _badges.tracks || libraryTracks().length, sub: "Every track in one list", tint: "rgba(0,229,255,0.12)", action: "selectPortalCategory('tracks')" },
-    { key: "folders", icon: "folders", title: "Folders", count: folders, sub: "Music by device folder", tint: "rgba(0,230,118,0.12)", action: "selectPortalCategory('folders')" },
-    { key: "albums", icon: "albums", title: "Albums", count: _badges.albums || albumIndexEntries().length, sub: "Records and compilations", tint: "rgba(124,92,255,0.13)", action: "selectPortalCategory('albums')" },
-    { key: "artists", icon: "artists", title: "Artists", count: _badges.artists || artistIndexEntries().length, sub: "Artist pages and albums", tint: "rgba(255,179,0,0.13)", action: "selectPortalCategory('artists')" },
-    { key: "genres", icon: "genres", title: "Genres", count: genres.length, sub: "Rock, pop, classical…", tint: "rgba(255,51,102,0.12)", action: "selectPortalCategory('genres')" },
+    { key: "tracks", icon: "songs", title: "All Songs", count: _badges.tracks, sub: "Every track in one list", tint: "rgba(0,229,255,0.12)", action: "selectPortalCategory('tracks')" },
+    { key: "folders", icon: "folders", title: "Folders", count: m.foldersCount, sub: "Music by device folder", tint: "rgba(0,230,118,0.12)", action: "selectPortalCategory('folders')" },
+    { key: "albums", icon: "albums", title: "Albums", count: _badges.albums, sub: "Records and compilations", tint: "rgba(124,92,255,0.13)", action: "selectPortalCategory('albums')" },
+    { key: "artists", icon: "artists", title: "Artists", count: _badges.artists, sub: "Artist pages and albums", tint: "rgba(255,179,0,0.13)", action: "selectPortalCategory('artists')" },
+    { key: "genres", icon: "genres", title: "Genres", count: m.genreCount, sub: "Rock, pop, classical…", tint: "rgba(255,51,102,0.12)", action: "selectPortalCategory('genres')" },
     { key: "lists", icon: "playlists", title: "Playlists", count: state.playlists.length, sub: "Your saved mixes", tint: "rgba(126,200,227,0.12)", action: "selectPortalCategory('lists')" },
-    { key: "liked", icon: "favorite", title: "Favorites", count: _badges.liked || 0, sub: "Songs you hearted", tint: "rgba(255,51,102,0.14)", action: "selectPortalCategory('liked')" },
-    { key: "history", icon: "recent", title: "Recently Played", count: historyUnique, sub: "Your listening trail", tint: "rgba(255,255,255,0.08)", action: "selectPortalCategory('history')" },
+    { key: "liked", icon: "favorite", title: "Favorites", count: _badges.liked, sub: "Songs you hearted", tint: "rgba(255,51,102,0.14)", action: "selectPortalCategory('liked')" },
+    { key: "history", icon: "recent", title: "Recently Played", count: m.historyUnique, sub: "Your listening trail", tint: "rgba(255,255,255,0.08)", action: "selectPortalCategory('history')" },
     { key: "queue", icon: "queue", title: "Queue", count: state.queue.length, sub: now ? `After ${now.title || "current song"}` : "What plays next", tint: "rgba(0,229,255,0.10)", action: "openPortalQueue()" },
     { key: "search", icon: "search", title: "Search", count: "", sub: "Find songs, albums, folders", tint: "rgba(255,255,255,0.07)", action: "openPortalSearch()" }
   ];
 }
 
-function renderLibraryPortal() {
+function renderLibraryPortal(force = false) {
   const grid = document.getElementById("portal-category-grid");
   if (!grid) return;
-  refreshBadges();
+  if (_portalPrimed && !force && grid.children.length) { updatePortalCountsOnly(); return; }
   const cards = buildPortalCategories();
   grid.innerHTML = cards.map((c, idx) => `
-    <div class="portal-category-card" style="--portal-tint:${c.tint}; animation-delay:${Math.min(idx * 34, 240)}ms;" onclick="${c.action}">
+    <div class="portal-category-card" data-portal-key="${c.key}" style="--portal-tint:${c.tint}; animation-delay:${Math.min(idx * 22, 140)}ms;" onclick="${c.action}">
       <div class="portal-card-top">
         <div class="portal-card-icon"><svg class="icon icon-md" viewBox="0 0 24 24">${portalIcon(c.icon)}</svg></div>
-        <div class="portal-card-count">${c.count === "" ? "" : String(c.count)}</div>
+        <div class="portal-card-count" data-portal-count="${c.key}">${c.count === "" ? "" : String(c.count || 0)}</div>
       </div>
       <div>
         <div class="portal-card-title">${escHtml(c.title)}</div>
-        <div class="portal-card-sub">${escHtml(c.sub)}</div>
+        <div class="portal-card-sub" data-portal-sub="${c.key}">${escHtml(c.sub)}</div>
       </div>
       <svg class="icon icon-xs portal-card-arrow" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </div>`).join("");
+  _portalPrimed = true;
+  updatePortalCountsOnly();
+}
+
+function updatePortalCountsOnly() {
+  const cards = buildPortalCategories();
+  cards.forEach(c => {
+    const count = document.querySelector(`[data-portal-count="${c.key}"]`);
+    const sub = document.querySelector(`[data-portal-sub="${c.key}"]`);
+    if (count) count.textContent = c.count === "" ? "" : String(c.count || 0);
+    if (sub) sub.textContent = c.sub;
+  });
   const rt = document.getElementById("portal-return-title");
   const cur = state.songs[state.currentIndex];
   if (rt) rt.textContent = cur ? `${cur.title || "Current track"} — ${cur.artist || ""}` : "No track selected";
 }
 
-function openLibraryPortal() {
-  renderLibraryPortal();
+function updatePortalReturnTitle() {
+  const rt = document.getElementById("portal-return-title");
+  const cur = state.songs[state.currentIndex];
+  if (rt) rt.textContent = cur ? `${cur.title || "Current track"} — ${cur.artist || ""}` : "No track selected";
+}
+
+function primeLibraryPortal() {
+  // Prebuild the 10-card portal during boot/idle so the first user swipe opens instantly.
+  const run = () => { renderLibraryPortal(true); schedulePortalMetricsRefresh(); };
+  if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 1200 });
+  else setTimeout(run, 120);
+}
+
+function openLibraryPortal(skipHaptic = false) {
   const portal = document.getElementById("library-category-portal");
   if (!portal) return;
+  if (!_portalPrimed) renderLibraryPortal(true);
+  portal.classList.remove("dragging");
+  portal.style.transform = "";
+  portal.style.opacity = "";
   portal.classList.add("open");
   portal.setAttribute("aria-hidden", "false");
-  haptic("tap");
+  updatePortalReturnTitle();
+  requestAnimationFrame(() => updatePortalCountsOnly());
+  if (!skipHaptic) haptic("tap");
 }
 
 function closeLibraryPortal() {
   const portal = document.getElementById("library-category-portal");
   if (!portal) return;
-  portal.classList.remove("open", "dragging");
+  portal.classList.remove("open", "dragging", "peek-open");
   portal.style.transform = "";
   portal.style.opacity = "";
   portal.setAttribute("aria-hidden", "true");
@@ -6141,6 +6221,22 @@ function attachLibrarySwipePortal() {
   const sc = document.getElementById("library-scroll-container");
   if (!sc || sc.dataset.portalSwipeArmed) return;
   sc.dataset.portalSwipeArmed = "1";
+  let raf = 0;
+  const draw = () => {
+    raf = 0;
+    const portal = document.getElementById("library-category-portal");
+    if (!portal || !librarySwipe.tracking) return;
+    if (librarySwipe.dx < 0) {
+      if (!_portalPrimed) renderLibraryPortal(true);
+      const w = window.innerWidth || 360;
+      const progress = Math.max(0, Math.min(1, -librarySwipe.dx / Math.max(160, w * 0.45)));
+      const x = (1 - progress) * 104;
+      portal.classList.add("dragging");
+      portal.setAttribute("aria-hidden", "false");
+      portal.style.transform = `translate3d(${x}%, 0, 0)`;
+      portal.style.opacity = String(Math.max(0.25, progress));
+    }
+  };
   sc.addEventListener("touchstart", e => {
     if (!e.touches || e.touches.length !== 1 || listPinchActive) return;
     const t = e.touches[0];
@@ -6151,21 +6247,42 @@ function attachLibrarySwipePortal() {
     const t = e.touches[0];
     const dx = t.clientX - librarySwipe.sx;
     const dy = t.clientY - librarySwipe.sy;
-    if (!librarySwipe.tracking && Math.abs(dx) > 18 && Math.abs(dx) > Math.abs(dy) * 1.35) librarySwipe.tracking = true;
+    if (!librarySwipe.tracking && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.18) {
+      librarySwipe.tracking = true;
+      if (!_portalPrimed) renderLibraryPortal(true);
+    }
     if (!librarySwipe.tracking) return;
     e.preventDefault();
     librarySwipe.dx = dx;
-    if (dx < -28) showSwipePeek("Library Home");
-    else if (dx > 38 && state.songs.length) showSwipePeek("Now Playing");
+    if (dx < -12) {
+      showSwipePeek("Library Home");
+      if (!raf) raf = requestAnimationFrame(draw);
+    } else if (dx > 42 && state.songs.length) {
+      showSwipePeek("Now Playing");
+    }
   }, { passive: false });
   sc.addEventListener("touchend", () => {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    const portal = document.getElementById("library-category-portal");
     if (librarySwipe.tracking) {
-      if (librarySwipe.dx < -72) openLibraryPortal();
-      else if (librarySwipe.dx > 88 && state.songs.length) expandNowPlayingScreen();
+      if (librarySwipe.dx < -42) {
+        openLibraryPortal(true);
+      } else if (librarySwipe.dx > 104 && state.songs.length) {
+        if (portal) { portal.classList.remove("dragging"); portal.style.transform = ""; portal.style.opacity = ""; portal.setAttribute("aria-hidden", "true"); }
+        expandNowPlayingScreen();
+      } else if (portal) {
+        portal.classList.remove("dragging");
+        portal.style.transform = ""; portal.style.opacity = ""; portal.setAttribute("aria-hidden", "true");
+      }
     }
     librarySwipe.active = false; librarySwipe.tracking = false; librarySwipe.dx = 0;
   }, { passive: true });
-  sc.addEventListener("touchcancel", () => { librarySwipe.active = false; librarySwipe.tracking = false; }, { passive: true });
+  sc.addEventListener("touchcancel", () => {
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    const portal = document.getElementById("library-category-portal");
+    if (portal) { portal.classList.remove("dragging"); portal.style.transform = ""; portal.style.opacity = ""; portal.setAttribute("aria-hidden", "true"); }
+    librarySwipe.active = false; librarySwipe.tracking = false;
+  }, { passive: true });
 }
 
 function portalSwipeStart(e) {
@@ -6271,6 +6388,8 @@ function playGenreTracks(genreName, shuffle = false) {
    ========================================================================= */
 
 function selectLibraryTab(tab) {
+  const portal = document.getElementById("library-category-portal");
+  if (portal && portal.classList.contains("open")) closeLibraryPortal();
   state.currentTab = tab;
   state.folderPath = null;
   document.querySelectorAll(".subnav-tab-item").forEach(t => t.classList.remove("active"));
@@ -9670,6 +9789,11 @@ function displayToast(msg) {
 }
 
 window.handleAndroidBack = function() {
+  const portal = document.getElementById("library-category-portal");
+  if (portal && portal.classList.contains("open")) {
+    closeLibraryPortal();
+    return "true";
+  }
   const openSheet = document.querySelector(".sheet-backdrop-mask.open");
   if (openSheet) {
     dismissAllSheets();

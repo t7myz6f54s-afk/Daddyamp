@@ -221,3 +221,16 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Fixed portal scroll fallback for WebViews/environments without smooth scrollTo.
 - Preserved mini-player gestures, pinch sizing, player lyrics/artwork gestures, folder scans, refresh, persistence, and strict mini-player layout zones.
 - Rebuilt signed APK as versionCode 29 / versionName 1.28.
+
+## v1.29 — instant Library Home portal performance fix
+
+- Fixed the reported slow swipe-left Library Home portal opening.
+- Removed synchronous genre/folder/history indexing from portal open.
+- Portal now prebuilds in idle time and opens from cached DOM.
+- Portal counts update asynchronously after the animation starts, not before.
+- Swipe-left now shows live panel drag feedback immediately instead of waiting until release.
+- Lowered the swipe threshold so normal swipes open reliably.
+- Reduced transition cost with lighter shadows, shorter card stagger, containment, will-change, and backface layer hints.
+- Added portal handling to Android back action.
+- 10k-track smoke test showed openLibraryPortal sync time around 1 ms after priming, with all 10 cards and counts intact.
+- Rebuilt signed APK as versionCode 30 / versionName 1.29.
