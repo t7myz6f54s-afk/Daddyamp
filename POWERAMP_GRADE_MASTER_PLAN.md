@@ -302,3 +302,11 @@ User feedback: previous motion polish had no visible value and made the app feel
 - Main list rows do not load artwork or render extra controls/metadata.
 - Real Android window transparency is implemented through translucent theme/layout/WebView/native bridge, with a user dim setting for readability.
 - Future animation work must be minimal and verified against the actual rendered DOM/build; no claims without proof.
+
+## v1.41 stability correction
+
+Responded to the reported self-scrolling and overheating symptoms:
+- Main list covers are back, but the row remains minimal: cover/title/artist only.
+- The list recycler no longer uses height-changing spacer nodes that can interact badly with WebView scroll anchoring. It uses a fixed-height list and translated visible-window container.
+- Decorative idle animation loops are disabled. No extra RAF progress loop remains.
+- Verification focus is now render stability/idle work first; no new feature/motion claims without real rendered proof.

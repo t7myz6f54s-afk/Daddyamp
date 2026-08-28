@@ -362,3 +362,14 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Kept only minimal tactile row press feedback and the existing smooth now-playing transition; no new decorative animation work was added in this pass.
 - JSDOM performance proof with 10,000 tracks: main rows mounted 27 initially, still 27 after scrolling deep; first visible row changed from Song 0 to Song 93; main rows contained no images and no duration nodes; stripped bars computed `display:none`; transparency setting toggled `transparent-bg`, dim set to 0.55, and native bridge call was observed.
 - Rebuilt signed APK as versionCode 41 / versionName 1.40.
+
+## v1.41 — covers restored + self-scroll/heat loop fix
+
+- Restored album cover thumbnails in the main Library list while keeping the stripped layout: cover + title + artist only.
+- Replaced the spacer-based virtual list with an absolute-positioned recycler. The old top/bottom spacer model could trigger browser/WebView scroll anchoring and appear as a self-scrolling/jumping list; the new model keeps one fixed total list height and translates only the visible row window.
+- Main list remains minimal: no duration, no format badge, no album text, no favorite/menu rail, no counts, and no tab clutter.
+- Disabled decorative infinite idle loops introduced by earlier polish: ambient drift, shimmer skeleton loops, and empty-state spinning are stopped for stability/heat. Playback-only indicators still only run while playing.
+- Removed the requestAnimationFrame mini-progress loop; progress now updates from the existing playback sync path instead of running an extra frame loop.
+- Kept true Android transparent-window support and dim setting from v1.40.
+- JSDOM stability proof with 10,000 tracks: 25 visible rows mounted initially, 25 after deep scroll; album art present; no duration/trailing/format nodes; scrollTop stayed exactly 5800 after 25 repeated scroll events; first visible row changed to Song 94; idle RAF delta over 500ms was 0; transparency bridge still fired; 0 JS errors.
+- Rebuilt signed APK as versionCode 42 / versionName 1.41.

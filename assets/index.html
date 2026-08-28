@@ -3209,8 +3209,8 @@ html.mini-has-context .mini-context-chip { display: inline; }
 /* v1.40 Performance-first main library: one simple song list */
 #library-subnav-bar, .catalog-filter-strip, .quick-shuffle-strip, .catalog-stats-banner { display: none !important; }
 #library-scroll-container { padding-top: 0 !important; }
-.simple-virtual-list { border-top: none; position: relative; contain: strict; }
-.simple-virtual-spacer { width: 1px; flex: 0 0 auto; }
+.simple-virtual-list { border-top: none; position: relative; contain: layout paint style; overflow-anchor: none; }
+.simple-virtual-spacer { display: none; }
 .song-catalog-row.song-row-simple {
   min-height: 58px;
   padding: 11px 18px;
@@ -3239,6 +3239,16 @@ html.transparent-bg #docked-mini-player {
   background: rgba(5,7,10,0.72) !important;
 }
 html.transparent-bg .song-catalog-row { text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.simple-virtual-list { overflow-anchor: none; }
+.simple-virtual-rows { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+.song-row-simple { height: 58px; }
+.song-row-simple .row-artwork-frame { width: 42px; height: 42px; margin-right: 12px; border-radius: 8px; display: block; }
+.song-row-simple .row-artwork-frame::before { display: none !important; animation: none !important; }
+.song-row-simple .row-artwork-img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+/* Stability/heat guard: no decorative infinite loops on idle/list screens. */
+.empty-state-illustration { animation: none !important; }
+.player-ambient-layer { animation: none !important; }
+.row-artwork-frame::before, .mini-cover-shell::before, .album-thumb-container::before, .drilldown-art-box::before { animation: none !important; }
 
 </style>
 </head>
@@ -5188,7 +5198,7 @@ function updatePlayButtonVisuals(playing) {
     btn.classList.toggle("is-playing", !!playing);
   });
   document.documentElement.classList.toggle("is-breathing", !!playing && !state.settings.reduceMotion);
-  if (playing) startSmoothMiniProgress(); else stopSmoothMiniProgress();
+  stopSmoothMiniProgress();
   updateMiniDeckMeta();
   if (typeof updateActivePlayingRowInDOM === "function") updateActivePlayingRowInDOM();
 }
@@ -9336,7 +9346,7 @@ function simpleSongRow(s, rowIndex) {
   row.className = `song-catalog-row song-row-simple ${isPlayingThis ? "playing-now" : ""}`;
   row.dataset.songId = s.id;
   row.dataset.path = s.path || s.url || "";
-  row.innerHTML = `<div class="row-meta-content"><div class="row-title-line">${escHtml(s.title || "Unknown Track")}</div><div class="row-details-line">${escHtml(s.artist || "Unknown Artist")}</div></div>`;
+  row.innerHTML = `<div class="row-artwork-frame"><img src="${escAttr(s.artwork || 'artwork/default.png')}" class="row-artwork-img" alt="${escAttr(s.title || 'Track')}" loading="lazy" decoding="async"></div><div class="row-meta-content"><div class="row-title-line">${escHtml(s.title || "Unknown Track")}</div><div class="row-details-line">${escHtml(s.artist || "Unknown Artist")}</div></div>`;
   row.onclick = () => {
     state.queue = [];
     const idx = resolveSongIndex(s);
@@ -9352,12 +9362,11 @@ function renderSimpleVirtualSongList(tracks, target) {
   const sc = document.getElementById("library-scroll-container");
   const listEl = document.createElement("div");
   listEl.className = "song-rows-catalog simple-virtual-list";
-  const top = document.createElement("div"); top.className = "simple-virtual-spacer";
   const rows = document.createElement("div"); rows.className = "simple-virtual-rows";
-  const bottom = document.createElement("div"); bottom.className = "simple-virtual-spacer";
-  listEl.appendChild(top); listEl.appendChild(rows); listEl.appendChild(bottom);
+  listEl.appendChild(rows);
+  listEl.style.height = Math.max(1, tracks.length * SIMPLE_ROW_H) + "px";
   target.appendChild(listEl);
-  simpleVirtualCtx = { tracks, target, listEl, rows, top, bottom, rowH: SIMPLE_ROW_H, start: -1, end: -1 };
+  simpleVirtualCtx = { tracks, target, listEl, rows, rowH: SIMPLE_ROW_H, start: -1, end: -1 };
   if (sc && !sc.dataset.simpleVirtualScroll) {
     sc.dataset.simpleVirtualScroll = "1";
     sc.addEventListener("scroll", () => {
@@ -9374,14 +9383,13 @@ function updateSimpleVirtualRows(force) {
   const total = ctx.tracks.length;
   const viewport = sc.clientHeight || window.innerHeight || 800;
   const scrollTop = Math.max(0, sc.scrollTop - (ctx.target.offsetTop || 0));
-  const overscan = 7;
+  const overscan = 6;
   const start = Math.max(0, Math.floor(scrollTop / ctx.rowH) - overscan);
   const count = Math.ceil(viewport / ctx.rowH) + overscan * 2;
   const end = Math.min(total, start + count);
   if (!force && start === ctx.start && end === ctx.end) return;
   ctx.start = start; ctx.end = end;
-  ctx.top.style.height = (start * ctx.rowH) + "px";
-  ctx.bottom.style.height = Math.max(0, (total - end) * ctx.rowH) + "px";
+  ctx.rows.style.transform = `translate3d(0, ${start * ctx.rowH}px, 0)`;
   const frag = document.createDocumentFragment();
   for (let i = start; i < end; i++) frag.appendChild(simpleSongRow(ctx.tracks[i], i));
   ctx.rows.replaceChildren(frag);
