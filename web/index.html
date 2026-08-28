@@ -40,7 +40,7 @@
   /* Layout Dimensions */
   --header-h: 48px;
   --subnav-h: 38px;
-  --mini-player-h: 62px;
+  --mini-player-h: 82px;
   --bottom-nav-h: 52px;
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -2502,6 +2502,154 @@ html:not(.is-breathing) .np-eq i { animation: none; height: 42%; }
 html.reduce-motion .np-eq i { animation: none !important; height: 42% !important; }
 
 
+
+/* MINI PLAYER PREMIUM PASS — Poweramp-inspired compact control deck */
+:root { --mini-art-url: url("artwork/default.png"); }
+#docked-mini-player {
+  left: 10px;
+  right: 10px;
+  bottom: calc(var(--bottom-nav-h) + 8px);
+  height: 72px;
+  padding: 9px 10px 9px 9px;
+  gap: 10px;
+  border-radius: 22px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(28,30,36,0.84), rgba(9,10,13,0.92)),
+    radial-gradient(80% 140% at 12% 50%, var(--accent-soft), transparent 55%);
+  border: 1px solid rgba(255,255,255,0.105);
+  box-shadow: 0 -10px 36px rgba(0,0,0,0.52), inset 0 1px 0 rgba(255,255,255,0.08);
+  backdrop-filter: blur(14px) saturate(1.12);
+  -webkit-backdrop-filter: blur(14px) saturate(1.12);
+  transform: translateZ(0);
+  transition: transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out), border-color 180ms var(--ease-out);
+}
+#docked-mini-player::before {
+  content: "";
+  position: absolute;
+  inset: -26px;
+  background-image: var(--mini-art-url);
+  background-size: cover;
+  background-position: center;
+  filter: blur(24px) saturate(1.06);
+  opacity: 0.18;
+  transform: scale(1.12);
+  pointer-events: none;
+}
+#docked-mini-player::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,0.05), transparent 30%, rgba(0,0,0,0.18));
+  pointer-events: none;
+}
+#docked-mini-player > * { position: relative; z-index: 1; }
+#docked-mini-player:active { transform: translateY(1px) scale(0.996); }
+.mini-drag-handle {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 34px;
+  height: 3px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.20);
+  z-index: 2;
+}
+.mini-progress-accent-line {
+  top: auto;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  box-shadow: 0 0 14px var(--accent-glow);
+}
+.mini-cover-shell {
+  width: 54px; height: 54px; flex: 0 0 54px;
+  border-radius: 16px;
+  padding: 2px;
+  background: linear-gradient(145deg, rgba(255,255,255,0.16), rgba(255,255,255,0.035));
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+}
+.mini-cover-thumb {
+  width: 100%; height: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.35);
+}
+.mini-playing-led {
+  position: absolute; right: -2px; bottom: -2px; width: 12px; height: 12px;
+  border-radius: 999px;
+  background: #5c6470;
+  border: 2px solid rgba(8,9,11,0.95);
+  box-shadow: none;
+}
+.is-breathing .mini-playing-led { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+.mini-meta-col { gap: 1px; padding-top: 2px; }
+.mini-kicker-row {
+  display: flex; align-items: center; gap: 5px;
+  color: rgba(255,255,255,0.42);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  min-width: 0;
+}
+.mini-dot-sep { opacity: 0.45; }
+.mini-title-line {
+  font-size: 14px;
+  font-weight: 760;
+  letter-spacing: -0.01em;
+  color: rgba(255,255,255,0.96);
+}
+.mini-artist-line { font-size: 11px; color: rgba(255,255,255,0.58); }
+.mini-format-chip {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.09);
+}
+.mini-wave-cluster {
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+  width: 27px; height: 28px;
+  margin-left: auto;
+  opacity: 0.42;
+}
+.mini-wave-cluster i {
+  width: 3px; height: 7px; border-radius: 999px;
+  background: rgba(255,255,255,0.52);
+  transform-origin: 50% 100%;
+}
+.is-breathing .mini-wave-cluster { opacity: 1; }
+.is-breathing .mini-wave-cluster i {
+  background: var(--accent);
+  animation: miniDeckMeter 780ms ease-in-out infinite alternate;
+}
+.is-breathing .mini-wave-cluster i:nth-child(2) { animation-delay: 90ms; }
+.is-breathing .mini-wave-cluster i:nth-child(3) { animation-delay: 170ms; }
+.is-breathing .mini-wave-cluster i:nth-child(4) { animation-delay: 40ms; }
+.is-breathing .mini-wave-cluster i:nth-child(5) { animation-delay: 130ms; }
+@keyframes miniDeckMeter {
+  from { transform: scaleY(0.55); opacity: 0.68; }
+  to { transform: scaleY(2.45); opacity: 1; }
+}
+.mini-trailing-actions { gap: 3px; }
+.mini-trailing-actions .btn-action-tap, .mini-trailing-actions .btn-inline-heart {
+  width: 34px; height: 34px;
+  background: rgba(255,255,255,0.035);
+  border: 1px solid rgba(255,255,255,0.055);
+}
+.mini-master-play-btn {
+  width: 46px; height: 46px;
+  color: #050608;
+  box-shadow: 0 8px 24px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.mini-swipe-hint { bottom: 84px; border-radius: 999px; background: rgba(8,9,12,0.84); padding: 5px 9px; }
+@media (max-width: 390px) {
+  .mini-wave-cluster, .mini-next-btn { display: none; }
+  #docked-mini-player { left: 8px; right: 8px; }
+  .mini-cover-shell { width: 50px; height: 50px; flex-basis: 50px; }
+}
+
 /* POWERAMP SEAMLESS REFINEMENT PASS: calmer motion, stronger touch feedback, less clunk */
 .song-catalog-row, .folder-row-item, .folder-root-card, .album-unit-box {
   -webkit-tap-highlight-color: transparent;
@@ -2656,22 +2804,35 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
   <!-- DOCKED PERSISTENT MINI PLAYER -->
   <div id="docked-mini-player" onclick="expandNowPlayingScreen()"
        ontouchstart="miniSwipeStart(event)" ontouchmove="miniSwipeMove(event)" ontouchend="miniSwipeEnd(event)">
+    <div class="mini-drag-handle" aria-hidden="true"></div>
     <div class="mini-progress-accent-line" id="mini-progress-line"></div>
-    <img src="artwork/default.png" alt="Cover" class="mini-cover-thumb" id="mini-thumb-img">
+    <div class="mini-cover-shell">
+      <img src="artwork/default.png" alt="Cover" class="mini-cover-thumb" id="mini-thumb-img">
+      <div class="mini-playing-led" id="mini-playing-led" aria-hidden="true"></div>
+    </div>
     
     <div class="mini-meta-col">
+      <div class="mini-kicker-row">
+        <span id="mini-state-label">Ready</span>
+        <span class="mini-dot-sep">•</span>
+        <span id="mini-time-label">0:00</span>
+      </div>
       <div class="mini-title-line" id="mini-meta-title">No track selected</div>
       <div class="mini-artist-line" id="mini-meta-artist">DaddyAmp <span class="mini-format-chip" id="mini-format-chip"></span></div>
     </div>
 
+    <div class="mini-wave-cluster" id="mini-wave-cluster" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i>
+    </div>
+
     <div class="mini-trailing-actions" onclick="event.stopPropagation()">
-      <button class="btn-inline-heart" id="mini-heart-btn" onclick="toggleActiveTrackFavorite()">
+      <button class="btn-inline-heart" id="mini-heart-btn" onclick="toggleActiveTrackFavorite()" title="Favorite">
         <svg class="icon icon-md" id="mini-heart-svg" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
-      <button class="mini-master-play-btn" id="mini-play-btn" onclick="togglePlayPauseState()">
+      <button class="mini-master-play-btn" id="mini-play-btn" onclick="togglePlayPauseState()" title="Play / Pause">
         <svg class="icon icon-md icon-fill" id="mini-play-svg" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg>
       </button>
-      <button class="btn-action-tap" onclick="executePlayNext()">
+      <button class="btn-action-tap mini-next-btn" onclick="executePlayNext()" title="Next">
         <svg class="icon icon-md" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
       </button>
     </div>
@@ -2679,7 +2840,7 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
     <!-- Swipe hint (shows briefly on first interaction) -->
     <div class="mini-swipe-hint" id="mini-swipe-hint">
       <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-      <span>swipe</span>
+      <span>swipe tracks • swipe up player</span>
       <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
   </div>
@@ -4018,6 +4179,7 @@ function hydrateIdlePlayerFromLibrary() {
   state.duration = song.duration || 0;
   state.currentTime = 0;
   updateTimerDisplays();
+  updateMiniDeckMeta();
   updateHeartVisuals(song.favorite);
   setAmbientArt(song.artwork || "artwork/default.png", true);
 }
@@ -4149,6 +4311,7 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   retriggerAnim(document.getElementById("mini-meta-title"), "text-enter");
   retriggerAnim(document.getElementById("mini-meta-artist"), "text-enter");
   updateTimerDisplays();
+  updateMiniDeckMeta();
   updateHeartVisuals(song.favorite);
 
   if (state.settings.dynamicTheme) {
@@ -4265,6 +4428,7 @@ function updatePlayButtonVisuals(playing) {
     btn.classList.toggle("is-playing", !!playing);
   });
   document.documentElement.classList.toggle("is-breathing", !!playing && !state.settings.reduceMotion);
+  updateMiniDeckMeta();
   if (typeof updateActivePlayingRowInDOM === "function") updateActivePlayingRowInDOM();
 }
 
@@ -4514,7 +4678,21 @@ function syncPlaybackPosition() {
 function updateMiniProgressBar() {
   const bar = document.getElementById("mini-progress-line");
   const pct = Math.max(0, Math.min(100, (state.currentTime / (state.duration || 1)) * 100));
-  bar.style.width = `${pct}%`;
+  if (bar) bar.style.width = `${pct}%`;
+  updateMiniDeckMeta();
+}
+
+function updateMiniDeckMeta() {
+  const stateEl = document.getElementById("mini-state-label");
+  const timeEl = document.getElementById("mini-time-label");
+  if (stateEl) {
+    stateEl.textContent = state.isPlaying ? "Playing" : (state.songs[state.currentIndex] ? "Paused" : "Ready");
+  }
+  if (timeEl) {
+    const left = formatDuration(state.currentTime || 0);
+    const right = state.duration ? formatDuration(state.duration) : "0:00";
+    timeEl.textContent = state.isPlaying ? `${left} / ${right}` : right;
+  }
 }
 
 function formatDuration(sec) {
@@ -6112,6 +6290,7 @@ function pambientImages() {
 
 function setAmbientArt(url, instant) {
   if (!url) url = "artwork/default.png";
+  try { document.documentElement.style.setProperty("--mini-art-url", `url("${String(url).replace(/"/g, '%22')}")`); } catch (e) {}
   // One atmosphere: the app wall + the player route wall swap together, never frozen
   [ambientImages(), pambientImages()].forEach(pair => swapAmbientPair(pair, url, instant));
 }
@@ -8109,14 +8288,18 @@ function applyDspPreset(name) {
    MINI PLAYER SWIPE GESTURES
    ========================================================================= */
 let miniSwipeStartX = 0;
+let miniSwipeStartY = 0;
 let miniSwipeTracking = false;
+let miniSwipeAxis = "";
 let miniSwipeAccumDelta = 0;
 const MINI_SWIPE_THRESHOLD = 55;
 
 function miniSwipeStart(e) {
   const touch = e.touches ? e.touches[0] : e;
   miniSwipeStartX = touch.clientX;
+  miniSwipeStartY = touch.clientY;
   miniSwipeTracking = false;
+  miniSwipeAxis = "";
   miniSwipeAccumDelta = 0;
 }
 
@@ -8124,25 +8307,32 @@ function miniSwipeMove(e) {
   if (!e.touches) return;
   const touch = e.touches[0];
   const dx = touch.clientX - miniSwipeStartX;
+  const dy = touch.clientY - miniSwipeStartY;
   
-  if (!miniSwipeTracking && Math.abs(dx) > 8) {
+  if (!miniSwipeTracking && (Math.abs(dx) > 8 || Math.abs(dy) > 10)) {
     miniSwipeTracking = true;
+    miniSwipeAxis = Math.abs(dy) > Math.abs(dx) * 1.15 ? "y" : "x";
   }
   
   if (miniSwipeTracking) {
     e.preventDefault();
-    miniSwipeAccumDelta += dx;
     const player = document.getElementById("docked-mini-player");
-    const clamped = Math.max(-55, Math.min(55, miniSwipeAccumDelta * 0.35));
-    player.style.transform = `translateX(${clamped}px)`;
-    player.style.transition = "none";
+    if (miniSwipeAxis === "y") {
+      miniSwipeAccumDelta = dy;
+      const clampedY = Math.max(-42, Math.min(18, dy * 0.38));
+      if (player) player.style.transform = `translateY(${clampedY}px) scale(${dy < 0 ? 1.006 : 0.996})`;
+    } else {
+      miniSwipeAccumDelta = dx;
+      const clamped = Math.max(-55, Math.min(55, dx * 0.35));
+      if (player) player.style.transform = `translateX(${clamped}px)`;
+    }
+    if (player) player.style.transition = "none";
     
-    // Show hint on first interaction
     if (!state.swipeHintShown) {
       const hint = document.getElementById("mini-swipe-hint");
       if (hint) {
         hint.classList.add("visible");
-        setTimeout(() => { hint.classList.remove("visible"); }, 2000);
+        setTimeout(() => { hint.classList.remove("visible"); }, 2200);
       }
       state.swipeHintShown = true;
     }
@@ -8151,20 +8341,23 @@ function miniSwipeMove(e) {
 
 function miniSwipeEnd(e) {
   const player = document.getElementById("docked-mini-player");
-  player.style.transition = "transform 0.18s ease-out";
-  player.style.transform = "translateX(0)";
+  if (player) {
+    player.style.transition = "transform 0.18s ease-out";
+    player.style.transform = "";
+    setTimeout(() => { player.style.transition = ""; }, 200);
+  }
   
-  setTimeout(() => { player.style.transition = ""; }, 200);
-  
-  if (miniSwipeTracking && Math.abs(miniSwipeAccumDelta) > MINI_SWIPE_THRESHOLD) {
-    if (miniSwipeAccumDelta < 0) {
-      executePlayNext();
-    } else {
-      executePlayPrevious();
+  if (miniSwipeTracking) {
+    if (miniSwipeAxis === "y" && miniSwipeAccumDelta < -38) {
+      expandNowPlayingScreen();
+    } else if (miniSwipeAxis !== "y" && Math.abs(miniSwipeAccumDelta) > MINI_SWIPE_THRESHOLD) {
+      if (miniSwipeAccumDelta < 0) executePlayNext();
+      else executePlayPrevious();
     }
   }
   
   miniSwipeTracking = false;
+  miniSwipeAxis = "";
   miniSwipeAccumDelta = 0;
 }
 

@@ -42,3 +42,14 @@ Research references used:
 5. Add smarter album artist grouping and disc/track-number sorting.
 6. Add persistent queue/session restoration with track identity rather than only path.
 7. Add Android notification artwork fallback improvements.
+
+## v1.19 mini-player premium target
+
+Poweramp-like mini-player should behave as a small physical control deck, not a generic generated bar:
+- Floating glass card above bottom nav, not a flat full-width rectangle.
+- Artwork-tinted but subtle, with real album art context and no noisy neon overuse.
+- Clear state/time line so the user knows whether it is ready, paused, or playing.
+- Thumb-first controls: favorite, play/pause, next, with large enough targets.
+- Gesture loop: horizontal swipe changes tracks, vertical swipe-up opens Now Playing.
+- Playing indication must be restrained: tiny LED + 5-bar meter only while audio is playing.
+- Metadata chip and mini-player should feel connected to the full player through shared artwork and accent.

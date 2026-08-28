@@ -116,3 +116,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Pull-to-refresh now refreshes persistent folder roots plus Android MediaStore, so refreshed music remains after restart.
 - Added calmer Poweramp-like touch feedback and guarded LRCLIB fetch for WebViews/test environments without fetch.
 - Rebuilt signed APK as versionCode 19 / versionName 1.18.
+
+## v1.19 — premium mini-player overhaul
+
+- Redesigned the mini-player from a flat generated-looking bar into a floating glass control deck above the bottom navigation.
+- Added subtle album-art tinting behind the mini-player via the current cover artwork, connected to the existing ambient art system.
+- Added mini-player drag handle, state/time kicker, restrained playing LED, and a five-bar micro meter that animates only during real playback.
+- Improved thumb ergonomics and visual hierarchy for favorite, play/pause, and next controls.
+- Added swipe-up on the mini-player to expand Now Playing, while preserving horizontal swipe previous/next.
+- Added safer mini progress/time updates and calmer press feedback to reduce the AI-generated/clunky feel.
+- Rebuilt signed APK as versionCode 20 / versionName 1.19.
