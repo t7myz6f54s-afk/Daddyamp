@@ -3452,6 +3452,9 @@ let state = {
   vizMode: "bars",         // bars | wave | radial
   crossfadeTriggered: false,
   pendingSeekMs: null,
+  audioReadyGen: null,     // playGen of the last successfully prepared load
+  errorTimer: null,        // verified-error debounce timer
+  errorScheduledGen: null, // playGen currently under error verification
   currentTime: 0,
   duration: 32,
   volume: 75,
@@ -3576,6 +3579,8 @@ window.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+
+    audioEl.addEventListener("error", () => { scheduleVerifiedAudioError(state.playGen); });
 
   setupMediaSessionIntegration();
 });
@@ -3877,6 +3882,11 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   state.playGen = gen;
   state.pendingSeekGen = gen; // this load owns any pending seek until applied
   if (window.__playlog) window.__playlog.push({ uri: String(song.path || song.url || song.id), idx: index, t: Date.now() });
+  // A new load resets error verification: a stale onError from the previous
+  // source must never toast or freeze the UI on THIS load.
+  clearTimeout(state.errorTimer); state.errorTimer = null;
+  state.errorScheduledGen = null;
+  state.audioReadyGen = null;
 
   document.getElementById("mini-meta-title").textContent = song.title;
   const miniArtistLine = document.getElementById("mini-meta-artist");
@@ -4000,24 +4010,36 @@ function startPlayback() {
   state.isPlaying = true;
   updatePlayButtonVisuals(true);
   noteListenStart();
+  hideErrorToast(); // a fresh successful play effort clears any old false error
 
   if (isAndroid) {
     const audioPath = song.path.startsWith("http") || song.path.startsWith("content://") || song.path.startsWith("file://")
       ? song.path 
       : "file:///android_asset/" + song.path;
-    window.AndroidBridge.playAudio(audioPath);
+    const ok = window.AndroidBridge.playAudio(audioPath);
+    if (ok === false) scheduleVerifiedAudioError(state.playGen); // sync failure
     window.AndroidBridge.setTempo(state.settings.tempo || 1.0);
   } else {
     audioEl.src = song.path;
     audioEl.currentTime = state.currentTime;
     audioEl.playbackRate = state.settings.tempo || 1.0;
-    audioEl.play().catch(() => {});
+    audioEl.play().catch(() => { scheduleVerifiedAudioError(state.playGen); });
   }
 
   updateActivePlayingRowInDOM();
 }
 
 function togglePlayPauseState() {
+  const curSong = state.songs[state.currentIndex];
+  if (!curSong) {
+    // No track: fully honest — nothing may look like it is playing.
+    if (isAndroid) { try { window.AndroidBridge.pauseAudio(); } catch (e) {} }
+    else { try { audioEl.pause(); } catch (e) {} }
+    state.isPlaying = false;
+    updatePlayButtonVisuals(false);
+    displayToast("No track selected");
+    return;
+  }
   if (!state.isPlaying) {
     initWebAudioDsp();
     if (isAndroid) {
@@ -7983,6 +8005,9 @@ window.handleAndroidBack = function() {
 
 // Android MediaPlayer Event Bridge Hooks
 window.onAudioPrepared = function(durMs) {
+  // This load genuinely works — a stale error can never overrule it.
+  state.audioReadyGen = state.playGen;
+  hideErrorToast();
   if (durMs > 0) {
     const cueCur = state.songs[state.currentIndex];
     if (!(cueCur && cueCur.cueOf)) {
@@ -8006,13 +8031,55 @@ window.onAudioFinished = function() {
 };
 
 window.onAudioError = function(code) {
-  // Honest: never change tracks without the user's tap. (Auto-skip here was the
-  // "tap A → B plays" hallucination.)
-  state.isPlaying = false;
-  updatePlayButtonVisuals(false);
-  const cur = state.songs[state.currentIndex];
-  displayToast(cur ? `Can't play “${cur.title}”` : "This file can't be played");
+  scheduleVerifiedAudioError(state.playGen);
 };
+
+/* ------------------------------------- verified audio errors (P0 fix) ----
+   When a load starts, MediaPlayer is reset/prepared: onError can arrive STALE
+   (previous source, abort, reset race) while the new source actually plays.
+   v1.12 trusted every onError → false "Can't play" toast + isPlaying=false →
+   frozen wavebar until pause/unpause "unlocked" it. That workaround is gone:
+   one verdict per playGen, delivered only when nothing is audible and the
+   load never prepared. Never changes the track. */
+function audioAudiblyPlaying() {
+  try {
+    if (isAndroid) {
+      // Raw MediaPlayer truth: still playing even if a stale onError landed.
+      return !!(window.AndroidBridge.isPlaying && window.AndroidBridge.isPlaying());
+    }
+    return !!(audioEl && !audioEl.paused && !audioEl.ended && audioEl.readyState >= 2);
+  } catch (e) { return false; }
+}
+
+function hideErrorToast() {
+  const t = document.getElementById("audify-toast-box");
+  if (t && t.textContent.indexOf("Can't play") !== -1) {
+    t.classList.remove("visible");
+    t.textContent = "";
+  }
+}
+
+function scheduleVerifiedAudioError(gen) {
+  if (state.errorScheduledGen === gen) return; // one verdict per load
+  state.errorScheduledGen = gen;
+  const arrivedAfterPrepare = state.audioReadyGen === gen;
+  clearTimeout(state.errorTimer);
+  state.errorTimer = setTimeout(() => {
+    state.errorScheduledGen = null;
+    state.errorTimer = null;
+    if (gen !== state.playGen) return;               // user moved on — stale error
+    if (audioAudiblyPlaying()) { hideErrorToast(); return; }            // audible → stale
+    if (!arrivedAfterPrepare && state.audioReadyGen === gen) {          // prepared late → stale
+      hideErrorToast(); return;
+    }
+    // Genuine failure: no sound and this load never prepared.
+    state.isPlaying = false;
+    updatePlayButtonVisuals(false);
+    const cur = state.songs[state.currentIndex];
+    displayToast(cur ? `Can't play “${cur.title}”` : "This file can't be played");
+    saveSession(true); // session must reflect the honest paused state
+  }, 650);
+}
 
 window.onAudioBecomingNoisy = function() {
   if (state.settings.autoPause && state.isPlaying) {

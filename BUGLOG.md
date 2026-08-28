@@ -163,3 +163,21 @@ tag write-back, media session, crossfade, playlists, stats, themes, history.
 - `onAudioFilesImported` had a duplicated persist/render block (dead code; removed).
 - `lyrics stays a layer` suite check raced the progress ticker (harness `getCurrentPosition`)
   — stabilized with `__setPos(55000)` matching the asserted value.
+
+## v1.13 — NO BUGS: false "can't play" + frozen wavebar killed (verified-error engine)
+
+- USER-REPORTED P0: toast "can't play" while audio plays + wavebar frozen until pause/unpause.
+  Root cause: `onAudioError` trusted unconditionally; MediaPlayer reset/prepare races deliver
+  STALE errors while the new source plays fine. Each stale error toasts AND sets
+  `isPlaying=false`, which freezes the wavebar (syncPlaybackPosition bails on !isPlaying).
+  Pause/unpause "worked" only by re-setting isPlaying — the secret handshake. KILLED:
+  verified-error engine (per-playGen verdict, 650ms settle, dedup, audible-check via raw
+  `isPlaying()`, prepared-wins, honest toast only when nothing is audible AND load never
+  prepared). Pause/unpause NEVER required. Suite-proofed (16 checks incl. stale-during-load,
+  stale-after-prepare, post-prepare death, clean-reload dismiss).
+- Side fixes: web `audioEl` error listener was missing & `play().catch(()=>{})` swallowed
+  real failures; `playAudio()===false` ignored; play button faked playing with no track
+  (now honest stop + "No track selected"); verified error saves paused session.
+- Sweep: rapid-tap last-wins (late error from tap 1 ignored), 150+ track library identity
+  (mounted + streamed chunks), repeat-one same id, shuffle never reorders, no scan banner
+  residue. Suite 163/163.
