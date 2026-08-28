@@ -414,7 +414,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 mmr.release();
 
                 JSONObject song = new JSONObject();
-                song.put("id", System.currentTimeMillis() + (long)(Math.random() * 10000));
+                song.put("id", stableTrackId(uri.toString()));
                 song.put("title", title);
                 song.put("artist", artist);
                 song.put("album", album);
@@ -1377,6 +1377,18 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 v.vibrate(milliseconds);
             }
         } catch (Exception ignored) {}
+    }
+
+    private long stableTrackId(String key) {
+        // Stable 53-bit positive id: safe for JavaScript Number equality and
+        // far larger than the old random/tiny buckets that caused collisions.
+        if (key == null) key = "";
+        long h = 0xcbf29ce484222325L; // FNV-1a 64-bit offset
+        for (int i = 0; i < key.length(); i++) {
+            h ^= key.charAt(i);
+            h *= 0x100000001b3L;
+        }
+        return h & 0x1fffffffffffffL; // Number.MAX_SAFE_INTEGER mask
     }
 
     private void runOnJs(final String jsCode) {

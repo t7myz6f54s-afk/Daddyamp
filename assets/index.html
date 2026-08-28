@@ -1891,7 +1891,7 @@ input:checked + .toggle-slider-bar::before {
   --text-primary: #F2F2F5;
   --text-secondary-64: rgba(255, 255, 255, 0.62);
   --text-tertiary-38: rgba(255, 255, 255, 0.38);
-  --ambient-blur: 48px;
+  --ambient-blur: 32px;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-hero: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -1972,9 +1972,11 @@ body, html { background: var(--void); }
   -webkit-backdrop-filter: blur(20px) saturate(1.2);
 }
 #library-scroll-container {
-  background: rgba(8, 9, 11, 0.52);
-  backdrop-filter: blur(28px) saturate(1.2);
-  -webkit-backdrop-filter: blur(28px) saturate(1.2);
+  /* Keep the scrolling surface flat: full-viewport backdrop-filter was
+     re-blurring the entire catalog on every scroll frame and caused jank. */
+  background: rgba(8, 9, 11, 0.66);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* Mini player: glass bar with hairline, radius on top corners */
@@ -3540,7 +3542,27 @@ const isAndroid = typeof window.AndroidBridge !== "undefined";
    LIFECYCLE INITIALIZATION
    ========================================================================= */
 
+let bootGuardActive = true;
+setTimeout(() => { bootGuardActive = false; }, 8000);
+
+function reportBootProblem(error) {
+  const message = (error && (error.stack || error.message)) ? (error.stack || error.message) : String(error || "Unknown boot error");
+  try { if (window.AndroidBridge && window.AndroidBridge.log) window.AndroidBridge.log("BOOT_ERROR: " + message); } catch (e) {}
+  try {
+    const toast = document.getElementById("audify-toast-box");
+    if (toast) {
+      toast.textContent = "DaddyAmp handled a startup error";
+      toast.classList.add("visible");
+      setTimeout(() => toast.classList.remove("visible"), 3500);
+    }
+  } catch (e) {}
+}
+
+window.addEventListener("error", e => { if (bootGuardActive) reportBootProblem(e.error || e.message); });
+window.addEventListener("unhandledrejection", e => { if (bootGuardActive) reportBootProblem(e.reason || e); });
+
 window.addEventListener("DOMContentLoaded", () => {
+  try {
   setupCanvas();
   window.addEventListener("resize", setupCanvas);
 
@@ -3555,7 +3577,7 @@ window.addEventListener("DOMContentLoaded", () => {
   attachCatalogLoadMore();
   armArtFallback();
 
-  setInterval(syncPlaybackPosition, 100);
+  setInterval(syncPlaybackPosition, 250);
 
   if (!isAndroid) {
     audioEl.addEventListener("timeupdate", () => {
@@ -3592,6 +3614,9 @@ window.addEventListener("DOMContentLoaded", () => {
     audioEl.addEventListener("error", () => { scheduleVerifiedAudioError(state.playGen); });
 
   setupMediaSessionIntegration();
+  } catch (e) {
+    reportBootProblem(e);
+  }
 });
 
 /* ---------------------------------------------- scale caches (10k+ tracks) -- */
@@ -4070,7 +4095,7 @@ function updateActivePlayingRowInDOM() {
   const rows = document.querySelectorAll(".song-catalog-row");
   rows.forEach(row => {
     const rowId = parseInt(row.dataset.songId, 10);
-    row.classList.toggle("playing-now", rowId === currentSongId);
+    row.classList.toggle("playing-now", String(row.dataset.songId) === String(currentSongId));
   });
 }
 
@@ -4372,9 +4397,13 @@ function syncPlaybackPosition() {
 
   if (isAndroid) {
     const posMs = window.AndroidBridge.getCurrentPosition();
-    const durMs = window.AndroidBridge.getDuration();
+    const now = Date.now();
     const syncCur = state.songs[state.currentIndex];
-    if (durMs > 0 && !(syncCur && syncCur.cueOf)) state.duration = durMs / 1000;
+    if (now - (syncPlaybackPosition._durT || 0) > 1000 || !state.duration) {
+      syncPlaybackPosition._durT = now;
+      const durMs = window.AndroidBridge.getDuration();
+      if (durMs > 0 && !(syncCur && syncCur.cueOf)) state.duration = durMs / 1000;
+    }
     state.currentTime = posMs / 1000;
     noteListenTick();
     maybeTriggerCrossfade();
@@ -6078,7 +6107,7 @@ function renderSeekStylePills() {
 function applyBlurLevel(level) {
   state.settings.blurLevel = level;
   saveAppOption("blurLevel", level);
-  const px = level === "low" ? 24 : (level === "high" ? 72 : 48);
+  const px = level === "low" ? 18 : (level === "high" ? 48 : 32);
   document.documentElement.style.setProperty("--ambient-blur", px + "px");
   renderBlurPills();
 }
@@ -6202,10 +6231,19 @@ function folderTreeOf(rootUri) {
 }
 
 function folderTrackId(url) {
+  // Stable 53-bit numeric id. The old 100k bucket collided badly in
+  // large libraries, making row actions/highlights point at the wrong track.
   const str = String(url || "");
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
-  return 700000 + ((h >>> 0) % 100000);
+  let h1 = 0x811c9dc5;
+  let h2 = 0x85ebca6b;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  const hi = (h1 >>> 0) % 0x1fffff;
+  const lo = (h2 >>> 0);
+  return hi * 0x100000000 + lo;
 }
 
 function ensureTrackId(t) {
@@ -6220,7 +6258,7 @@ function ensureTrackId(t) {
 function resolveSongIndex(t) {
   if (!t) return -1;
   if (t.id != null && t.id !== "") {
-    const i = state.songs.findIndex(x => x && x.id != null && x.id === t.id);
+    const i = state.songs.findIndex(x => x && x.id != null && String(x.id) === String(t.id));
     if (i !== -1) return i;
   }
   if (t.url) {
@@ -7081,7 +7119,7 @@ function songRowTrailingHtml(s) {
 function buildSongRow(s, rowIndex) {
   const ctx = catalogCtx;
   const opts = ctx ? ctx.opts : null;
-  const isPlayingThis = state.songs[state.currentIndex]?.id === s.id && state.songs[state.currentIndex]?.id != null;
+  const isPlayingThis = String(state.songs[state.currentIndex]?.id) === String(s.id) && state.songs[state.currentIndex]?.id != null;
   const row = document.createElement("div");
   row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
   row.dataset.songId = s.id;
@@ -7097,7 +7135,7 @@ function buildSongRow(s, rowIndex) {
     const idx = resolveSongIndex(s);
     if (idx !== -1) loadTrack(idx, true);
   };
-  if (state.songs[state.currentIndex] && s.id != null && s.id === state.songs[state.currentIndex].id) {
+  if (state.songs[state.currentIndex] && s.id != null && String(s.id) === String(state.songs[state.currentIndex].id)) {
     const eq = document.createElement("span");
     eq.className = "np-eq";
     eq.setAttribute("aria-hidden", "true");
@@ -7808,7 +7846,7 @@ function saveEditedTags() {
   persistState();
   refreshBadges();
   renderLibraryTab();
-  if (state.songs[state.currentIndex]?.id === s.id) {
+  if (String(state.songs[state.currentIndex]?.id) === String(s.id)) {
     loadTrack(state.currentIndex, state.isPlaying);
     updateMediaSession(state.songs[state.currentIndex]);
   }
@@ -7839,7 +7877,7 @@ function actionFetchOnlineArtwork() {
         persistState();
         renderLibraryTab();
         setAmbientArt(s.artwork || "artwork/default.png");
-        if (state.songs[state.currentIndex]?.id === s.id) {
+        if (String(state.songs[state.currentIndex]?.id) === String(s.id)) {
           document.getElementById("player-artwork-img").src = highResArt;
           document.getElementById("mini-thumb-img").src = highResArt;
           extractCoverPalette(s);

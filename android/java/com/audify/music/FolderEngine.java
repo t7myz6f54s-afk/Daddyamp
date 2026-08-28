@@ -231,7 +231,6 @@ public class FolderEngine extends SQLiteOpenHelper {
         final JSONArray batch = new JSONArray();
         final long startMs = System.currentTimeMillis();
 
-        activeRootUri = treeUri;
         lastEmitMs = System.currentTimeMillis();
         walk(tree, tree, "", known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs, msIndex, msPrefix);
 
@@ -329,11 +328,11 @@ public class FolderEngine extends SQLiteOpenHelper {
                 seen.add(key);
                 current.put(key, mtime + "|" + size);
                 stats[0]++;
-                maybeHeartbeat(relPath, stats);
+                maybeHeartbeat(tree.toString(), relPath, stats);
 
                 String knownMeta = known.get(key);
                 if (knownMeta != null && knownMeta.equals(mtime + "|" + size)) {
-                    flushWalkBatch(batch, stats, relPath);
+                    flushWalkBatch(tree.toString(), batch, stats, relPath);
                     continue; // unchanged
                 }
                 if (knownMeta != null) stats[2]++; else stats[1]++;
@@ -357,7 +356,7 @@ public class FolderEngine extends SQLiteOpenHelper {
                 if (durationIgnore(song, ignoreShortMs)) continue;
 
                 batch.put(song);
-                if (batch.length() >= 200) flushWalkBatch(batch, stats, relPath);
+                if (batch.length() >= 200) flushWalkBatch(tree.toString(), batch, stats, relPath);
             }
         } finally {
             c.close();
@@ -373,9 +372,8 @@ public class FolderEngine extends SQLiteOpenHelper {
         }
     }
 
-    private String activeRootUri = "";
     private long lastEmitMs = 0;
-    private void flushWalkBatch(JSONArray batch, int[] stats, String relPath) {
+    private void flushWalkBatch(String rootUri, JSONArray batch, int[] stats, String relPath) {
         if (batch.length() == 0) return;
         JSONObject o = new JSONObject();
         try {
@@ -387,12 +385,12 @@ public class FolderEngine extends SQLiteOpenHelper {
             o.put("batch", batch);
         } catch (Exception ignored) {}
         lastEmitMs = System.currentTimeMillis();
-        emitProgress(activeRootUri, o);
+        emitProgress(rootUri, o);
         while (batch.length() > 0) batch.remove(0);
     }
 
     /** Emit a live heartbeat so the UI never looks frozen during long unchanged walks. */
-    private void maybeHeartbeat(String relPath, int[] stats) {
+    private void maybeHeartbeat(String rootUri, String relPath, int[] stats) {
         long now = System.currentTimeMillis();
         if (now - lastEmitMs < 1000) return;
         lastEmitMs = now;
@@ -405,7 +403,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             o.put("currentPath", relPath);
             o.put("heartbeat", true);
         } catch (Exception ignored) {}
-        emitProgress(activeRootUri, o);
+        emitProgress(rootUri, o);
     }
 
     /** "primary:Music/a.mp3" -> "/storage/emulated/0/Music/a.mp3" (or null). */

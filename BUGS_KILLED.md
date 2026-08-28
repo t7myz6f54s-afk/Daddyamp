@@ -75,3 +75,14 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - On-device confirmation (recommended, not blocking): install v1.13, play a known-good file
   → no toast, wavebar runs within ~300 ms; skip A→B clean; pause/unpause changes nothing
   but pause/resume; a broken file toasts only once.
+
+## v1.15 — startup guard + lag/collision cleanup
+
+- Added a boot-level JavaScript error/rejection guard so a startup exception is logged through the Android bridge and surfaced without leaving a dead blank WebView.
+- Removed the full-viewport `backdrop-filter` from the main scrolling library container. This was re-blurring the entire catalog on every scroll frame and contradicted the earlier lag-fix note.
+- Reduced default ambient blur cost: medium 48px → 32px, high 72px → 48px, low 24px → 18px.
+- Reduced Android playback polling from 10Hz to 4Hz and throttled native duration bridge calls to once per second while preserving progress/lyrics updates.
+- Replaced the 100k-bucket folder track id hash with a safe 53-bit stable id. The old hash collided heavily in large libraries and could mark/play/menu the wrong row.
+- Native imports now use stable URI-derived ids instead of time/random ids, preventing duplicate identities after re-import/restart.
+- Folder scanner progress emission no longer depends on a shared active-root field, so concurrent/root-overlapping scans cannot report progress against the wrong root.
+- Rebuilt signed APK as versionCode 16 / versionName 1.15.
