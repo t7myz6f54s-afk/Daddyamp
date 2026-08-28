@@ -121,3 +121,13 @@ Implemented next category-intelligence layer:
 - Artist detail gained a shuffle action.
 - Context sorting now uses album → disc → track number → natural title, so large artist/album views feel less random.
 - Android MediaStore/device scan and folder scan now carry trackNumber where available, improving album order without changing playback identity.
+
+## v1.24 Phase 2 continuation — library context polish
+
+Implemented low-risk library polish from the roadmap:
+- Album cards now show total duration alongside artist and track count.
+- Artist cards now show song count, album count, and total duration.
+- Folder cards now show total duration alongside track count.
+- Long library totals now render as h:mm:ss instead of oversized minute counts.
+- Album detail always sorts with the natural album ordering pipeline even if opened from search/context with an unsorted list.
+- Added optional Playback setting: Tap Track Opens Player. Default remains off to preserve the existing list-browsing behavior; users who want a Poweramp-style immediate Now Playing jump can enable it.

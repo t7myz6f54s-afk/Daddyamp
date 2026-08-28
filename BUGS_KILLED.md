@@ -165,3 +165,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Native Android device/folder scans now include trackNumber where MediaStore/retriever exposes it; JS persists and uses it for album/artist ordering.
 - Fixed favorite lookup to compare stable ids as strings, preventing missed favorite toggles on mixed numeric/string ids.
 - Rebuilt signed APK as versionCode 24 / versionName 1.23.
+
+## v1.24 — library totals + optional list-to-player behavior
+
+- Album grid cards now show total album duration.
+- Artist grid cards now show song count, album count, and total duration.
+- Folder grid cards now show total folder duration.
+- Duration formatting now switches to h:mm:ss for long albums/folders/artists.
+- Album detail re-sorts incoming lists through the natural album order pipeline, so context/search opens are stable.
+- Added optional Playback setting: Tap Track Opens Player. It defaults off, preserving current browsing behavior, but can mimic Poweramp-style immediate Now Playing launch.
+- Rebuilt signed APK as versionCode 25 / versionName 1.24.

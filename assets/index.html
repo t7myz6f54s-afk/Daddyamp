@@ -3465,6 +3465,16 @@ html.reduce-motion .np-eq i { animation: none !important; height: 42% !important
           </div>
           <div class="setting-card-item">
             <div>
+              <div style="font-weight: 650; font-size: 13px;">Tap Track Opens Player</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Optional Poweramp-style jump to Now Playing after list taps</div>
+            </div>
+            <label class="toggle-switch-unit">
+              <input type="checkbox" id="toggle-list-open-player" onchange="saveAppOption('listTapOpenPlayer', this.checked); syncPlaybackSettingsUI();">
+              <span class="toggle-slider-bar"></span>
+            </label>
+          </div>
+          <div class="setting-card-item">
+            <div>
               <div style="font-weight: 650; font-size: 13px;">Crossfade Between Tracks</div>
               <div style="font-size: 11px; color: var(--text-tertiary);">Smooth fade when a track ends</div>
             </div>
@@ -3786,6 +3796,7 @@ let state = {
     autoPause: true,
     lrclibFetch: true,
     autoQueue: true,
+    listTapOpenPlayer: false,
     tempo: 1.0,
     theme: "abyss",
     crossfadeSec: 0,
@@ -3948,7 +3959,7 @@ function albumIndexEntries() {
       const arr = map[key] || (map[key] = { name: key, songs: [] });
       arr.songs.push(s);
     }
-    const entries = Object.keys(map).map(k => map[k]);
+    const entries = Object.keys(map).map(k => { map[k].songs = contextSortSongs(map[k].songs); map[k].duration = sumSongDuration(map[k].songs); return map[k]; });
     entries.sort((a, b) => a.name.localeCompare(b.name));
     _albumIndex = { rev: state.songsRev, entries };
   }
@@ -3965,7 +3976,7 @@ function artistIndexEntries() {
       arr.songs.push(s);
     }
     const entries = Object.keys(map).map(k => map[k]);
-    entries.forEach(e => { e.songs = contextSortSongs(e.songs); });
+    entries.forEach(e => { e.songs = contextSortSongs(e.songs); e.duration = sumSongDuration(e.songs); e.albumCount = new Set(e.songs.map(s => s.album || "Unknown Album")).size; });
     entries.sort((a, b) => a.name.localeCompare(b.name));
     _artistIndex = { rev: state.songsRev, entries };
   }
@@ -4715,6 +4726,8 @@ function syncPlaybackSettingsUI() {
   const aq2 = document.getElementById("toggle-auto-queue-settings");
   if (aq1) aq1.checked = !!state.settings.autoQueue;
   if (aq2) aq2.checked = !!state.settings.autoQueue;
+  const lop = document.getElementById("toggle-list-open-player");
+  if (lop) lop.checked = !!state.settings.listTapOpenPlayer;
   const rng = document.getElementById("tempo-range");
   if (rng) rng.value = state.settings.tempo || 1;
   const lbl = document.getElementById("tempo-value-label");
@@ -4826,9 +4839,15 @@ function updateMiniDeckMeta() {
 
 function formatDuration(sec) {
   const s = Math.floor(sec || 0);
-  const m = Math.floor(s / 60);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
   const r = s % 60;
+  if (h > 0) return `${h}:${m < 10 ? '0' : ''}${m}:${r < 10 ? '0' : ''}${r}`;
   return `${m}:${r < 10 ? '0' : ''}${r}`;
+}
+
+function sumSongDuration(list) {
+  return (list || []).reduce((acc, cur) => acc + (cur.duration || 0), 0);
 }
 
 let lastRenderedTimeStr = "";
@@ -5941,12 +5960,13 @@ function renderFolderBrowser() {
   renderWindowedGrid(grid, keys, (path) => {
     const entries = folders[path];
     const first = entries[0].song;
+    const totalSecs = entries.reduce((acc, cur) => acc + (cur.song.duration || 0), 0);
     return `
       <div class="album-thumb-container">
         <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(dirBaseName(path))}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text">${escHtml(dirBaseName(path))}</div>
-      <div class="album-artist-text">${entries.length} tracks</div>`;
+      <div class="album-artist-text">${entries.length} tracks • ${formatDuration(totalSecs)}</div>`;
   }, "");
   grid.addEventListener("click", (ev) => {
     const card = ev.target.closest(".album-unit-box");
@@ -7741,7 +7761,10 @@ function buildSongRow(s, rowIndex) {
   row.onclick = () => {
     state.queue = []; // a direct tap resets "up next" — no rogue advances
     const idx = resolveSongIndex(s);
-    if (idx !== -1) loadTrack(idx, true);
+    if (idx !== -1) {
+      loadTrack(idx, true);
+      if (state.settings.listTapOpenPlayer) expandNowPlayingScreen();
+    }
   };
   if (state.isPlaying && state.songs[state.currentIndex] && s.id != null && String(s.id) === String(state.songs[state.currentIndex].id)) {
     const eq = document.createElement("span");
@@ -7882,7 +7905,7 @@ function renderAlbumCards() {
         <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text">${escHtml(e.name)}</div>
-      <div class="album-artist-text">${escHtml(first.artist)} • ${e.songs.length} tracks</div>`;
+      <div class="album-artist-text">${escHtml(first.artist)} • ${e.songs.length} tracks • ${formatDuration(e.duration || sumSongDuration(e.songs))}</div>`;
   }, "");
   grid.addEventListener("click", (ev) => {
     const card = ev.target.closest(".album-unit-box");
@@ -7894,8 +7917,9 @@ function renderAlbumCards() {
 
 function renderAlbumDetailView(albumName, list) {
   const target = document.getElementById("library-render-target");
-  const first = list[0];
-  const totalSecs = list.reduce((acc, cur) => acc + (cur.duration || 0), 0);
+  const sorted = contextSortSongs(list || []);
+  const first = sorted[0];
+  const totalSecs = sumSongDuration(sorted);
 
   target.innerHTML = `
     <div style="padding: 10px 14px 4px 14px;">
@@ -7905,16 +7929,16 @@ function renderAlbumDetailView(albumName, list) {
     </div>
     <div class="drilldown-header-card">
       <div class="drilldown-art-box">
-        <img src="${first.artwork || 'artwork/default.png'}" alt="${albumName}">
+        <img src="${first.artwork || 'artwork/default.png'}" alt="${escAttr(albumName)}">
       </div>
       <div class="drilldown-info-col">
-        <div class="drilldown-main-title">${albumName}</div>
-        <div class="drilldown-sub-text">${first.artist} • ${list.length} tracks • ${formatDuration(totalSecs)}</div>
+        <div class="drilldown-main-title">${escHtml(albumName)}</div>
+        <div class="drilldown-sub-text">${escHtml(first.artist)} • ${sorted.length} tracks • ${formatDuration(totalSecs)}</div>
         <div class="drilldown-buttons-row">
-          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playAlbumTracks('${albumName}', false)">
+          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playAlbumTracks(${quote(albumName)}, false)">
             <svg class="icon icon-xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> Play All
           </button>
-          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playAlbumTracks('${albumName}', true)">
+          <button class="btn-import-header" style="height: 30px; padding: 0 10px; font-size: 11px;" onclick="playAlbumTracks(${quote(albumName)}, true)">
             <svg class="icon icon-xs" viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/></svg> Shuffle
           </button>
         </div>
@@ -7925,7 +7949,7 @@ function renderAlbumDetailView(albumName, list) {
 
   const trackListContainer = document.getElementById("drilldown-track-list");
   // Windowed rows: an album's track list streams in like the main catalog.
-  renderSongsCatalog(list, "No tracks", trackListContainer, {
+  renderSongsCatalog(sorted, "No tracks", trackListContainer, {
     leadHtml: (s, idx) => `
       <span style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); width: 22px; text-align: center; align-self: center;">${idx + 1 < 10 ? '0' : ''}${idx + 1}</span>`,
     noAlbumLine: true
@@ -7935,7 +7959,7 @@ function renderAlbumDetailView(albumName, list) {
 function playAlbumTracks(albumName, shuffle = false) {
   const albumSongs = state.songs.filter(s => s.album === albumName);
   if (albumSongs.length === 0) return;
-  state.queue = [...albumSongs];
+  state.queue = contextSortSongs(albumSongs);
   if (shuffle) {
     state.queue.sort(() => Math.random() - 0.5);
   }
@@ -7958,7 +7982,7 @@ function renderArtistCards() {
         <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text" style="text-align: center;">${escHtml(e.name)}</div>
-      <div class="album-artist-text" style="text-align: center;">${e.songs.length} songs</div>`;
+      <div class="album-artist-text" style="text-align: center;">${e.songs.length} songs • ${e.albumCount || new Set(e.songs.map(s => s.album || "Unknown Album")).size} albums • ${formatDuration(e.duration || sumSongDuration(e.songs))}</div>`;
   }, "");
   grid.addEventListener("click", (ev) => {
     const card = ev.target.closest(".album-unit-box");
