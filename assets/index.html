@@ -2199,6 +2199,15 @@ html.reduce-motion #full-player-screen { transition-duration: 0.001s !important;
 /* Virtualized catalog sentinel */
 .catalog-sentinel { height: 1px; }
 
+/* Search truncation / scale footnotes */
+.catalog-footer-note {
+  padding: 10px 16px 14px;
+  font-size: 11px;
+  color: var(--text-tertiary-38);
+  text-align: center;
+  letter-spacing: 0.2px;
+}
+
 /* Folder root cards + rows */
 .folder-root-card {
   margin: 8px 14px;
@@ -3585,6 +3594,68 @@ window.addEventListener("DOMContentLoaded", () => {
   setupMediaSessionIntegration();
 });
 
+/* ---------------------------------------------- scale caches (10k+ tracks) -- */
+// Bumped every time state.songs is replaced/mutated so memoized indexes know
+// when to recompute. Everything below is O(n) once per change, O(1) after.
+function bumpSongsRev() { state.songsRev = (state.songsRev || 0) + 1; }
+
+let _libTracks = { rev: -1, list: [] };
+function libraryTracks() {
+  if (_libTracks.rev !== state.songsRev) _libTracks = { rev: state.songsRev, list: state.songs.filter(s => !s.virtual) };
+  return _libTracks.list;
+}
+
+let _sortCache = { key: null, dir: null, rev: -1, src: null, list: [] };
+function applyCurrentSortCached(list) {
+  if (_sortCache.src === list && _sortCache.key === state.sortKey && _sortCache.dir === state.sortDesc && _sortCache.rev === state.songsRev) {
+    return _sortCache.list;
+  }
+  const out = [...list].sort(sortComparator(state.sortKey));
+  _sortCache = { key: state.sortKey, dir: state.sortDesc, rev: state.songsRev, src: list, list: out };
+  return out;
+}
+
+let _badges = { rev: -1, tracks: 0, albums: 0, artists: 0, liked: 0, folders: -1, lists: -1 };
+let _albumIndex = { rev: -1, entries: [] };
+function albumIndexEntries() {
+  if (_albumIndex.rev !== state.songsRev) {
+    const map = {};
+    for (const s of libraryTracks()) {
+      const key = s.album || "Unknown Album";
+      const arr = map[key] || (map[key] = { name: key, songs: [] });
+      arr.songs.push(s);
+    }
+    const entries = Object.keys(map).map(k => map[k]);
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    _albumIndex = { rev: state.songsRev, entries };
+  }
+  return _albumIndex.entries;
+}
+
+let _artistIndex = { rev: -1, entries: [] };
+function artistIndexEntries() {
+  if (_artistIndex.rev !== state.songsRev) {
+    const map = {};
+    for (const s of state.songs) { // artists count every track incl. virtual
+      const key = s.artist || "Unknown Artist";
+      const arr = map[key] || (map[key] = { name: key, songs: [] });
+      arr.songs.push(s);
+    }
+    const entries = Object.keys(map).map(k => map[k]);
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    _artistIndex = { rev: state.songsRev, entries };
+  }
+  return _artistIndex.entries;
+}
+
+let _folderIndex = { rev: -1, folders: null };
+function buildFolderIndexCached() {
+  if (_folderIndex.rev !== state.songsRev) {
+    _folderIndex = { rev: state.songsRev, folders: buildFolderIndex() };
+  }
+  return _folderIndex.folders;
+}
+
 function loadPersistedData() {
   try {
     const imported = localStorage.getItem("daddyamp_imported_songs");
@@ -3592,6 +3663,7 @@ function loadPersistedData() {
       const parsed = JSON.parse(imported);
       if (Array.isArray(parsed) && parsed.length > 0) {
         state.songs = [...parsed];
+        bumpSongsRev();
       }
     }
     const liked = localStorage.getItem("daddyamp_liked_ids");
@@ -3657,17 +3729,19 @@ function applyPersistedSettings() {
 }
 
 function refreshBadges() {
-  const realTracks = state.songs.filter(s => !s.virtual);
-  document.getElementById("tag-tracks-count").textContent = realTracks.length;
-  
-  const albums = new Set(realTracks.map(s => s.album));
-  document.getElementById("tag-albums-count").textContent = albums.size;
-
-  const artists = new Set(state.songs.map(s => s.artist));
-  document.getElementById("tag-artists-count").textContent = artists.size;
-
-  const likedCount = state.songs.filter(s => s.favorite).length;
-  document.getElementById("tag-liked-count").textContent = likedCount;
+  if (_badges.rev !== state.songsRev) {
+    let n = 0, albumSet = {}, artistSet = {}, liked = 0;
+    for (const s of state.songs) {
+      if (!s.virtual) { n++; albumSet[s.album] = 1; }
+      artistSet[s.artist] = 1;
+      if (s.favorite) liked++;
+    }
+    _badges = { rev: state.songsRev, tracks: n, albums: Object.keys(albumSet).length, artists: Object.keys(artistSet).length, liked };
+  }
+  document.getElementById("tag-tracks-count").textContent = _badges.tracks;
+  document.getElementById("tag-albums-count").textContent = _badges.albums;
+  document.getElementById("tag-artists-count").textContent = _badges.artists;
+  document.getElementById("tag-liked-count").textContent = _badges.liked;
 
   const foldersCount = folderBadgeCount();
   const foldersTag = document.getElementById("tag-folders-count");
@@ -3675,8 +3749,8 @@ function refreshBadges() {
   const listsTag = document.getElementById("tag-lists-count");
   if (listsTag) listsTag.textContent = state.playlists.length;
 
-  document.getElementById("summary-meta-line").textContent = `${realTracks.length} SONGS • DADDYAMP LOCAL LIBRARY`;
-  document.getElementById("label-quick-meta").textContent = `${realTracks.length} TRACKS AVAILABLE`;
+  document.getElementById("summary-meta-line").textContent = `${_badges.tracks} SONGS • DADDYAMP LOCAL LIBRARY`;
+  document.getElementById("label-quick-meta").textContent = `${_badges.tracks} TRACKS AVAILABLE`;
 }
 
 /* =========================================================================
@@ -5112,7 +5186,7 @@ function renderLibraryTab() {
   const tab = state.currentTab;
 
   if (tab === "tracks") {
-    renderSongsCatalog(applyCurrentSort(state.songs.filter(s => !s.virtual)));
+    renderSongsCatalog(applyCurrentSortCached(libraryTracks()));
   } else if (tab === "albums") {
     renderAlbumCards();
   } else if (tab === "artists") {
@@ -5154,7 +5228,7 @@ function sortComparator(key) {
 }
 
 function applyCurrentSort(list) {
-  return [...list].sort(sortComparator(state.sortKey));
+  return applyCurrentSortCached(list);
 }
 
 const SORT_LABELS = { title: "Title", artist: "Artist", album: "Album", duration: "Length", year: "Year" };
@@ -5321,7 +5395,7 @@ function dirBaseName(p) {
 function renderFolderBrowser() {
   const target = document.getElementById("library-render-target");
   if (folderState.roots.length > 0) { renderFolderRootsBrowser(); return; }
-  const folders = buildFolderIndex();
+  const folders = buildFolderIndexCached();
 
   if (Object.keys(folders).length === 0) {
     target.innerHTML = `
@@ -5391,22 +5465,22 @@ function renderFolderBrowser() {
   `;
   const grid = document.getElementById("folders-cards-container");
   const keys = Object.keys(folders).sort((a, b) => a.localeCompare(b));
-  keys.forEach(path => {
+  renderWindowedGrid(grid, keys, (path) => {
     const entries = folders[path];
     const first = entries[0].song;
-    const card = document.createElement("div");
-    card.className = "album-unit-box";
-    card.style.cursor = "pointer";
-    card.innerHTML = `
+    return `
       <div class="album-thumb-container">
-        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escHtml(dirBaseName(path))}">
+        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(dirBaseName(path))}" loading="lazy" decoding="async">
       </div>
       <div class="album-title-text">${escHtml(dirBaseName(path))}</div>
-      <div class="album-artist-text">${entries.length} tracks</div>
-    `;
-    card.onclick = () => { state.folderPath = path; renderLibraryTab(); };
-    grid.appendChild(card);
-  });
+      <div class="album-artist-text">${entries.length} tracks</div>`;
+  }, "");
+  grid.addEventListener("click", (ev) => {
+    const card = ev.target.closest(".album-unit-box");
+    if (!card) return;
+    state.folderPath = keys[parseInt(card.dataset.entryIdx, 10)];
+    renderLibraryTab();
+  }, { passive: true });
   updateSortChip();
 }
 
@@ -6083,6 +6157,7 @@ const folderState = {
   roots: [],      // { uri, name, enabled, lastScan, accessLost }
   tracks: new Map(), // url -> song (source === "folder")
   loading: false,
+  rev: 0,         // bump on every tracks change → folderApplyToLibrary skips no-op rebuilds
   scanning: new Map() // uri -> {running, scanned, added, updated, removed, currentPath, done}
 };
 
@@ -6161,9 +6236,10 @@ function resolveSongIndex(t) {
 
 function resolveSongByID(id) {
   if (id == null || id === "") return -1;
-  const i = state.songs.findIndex(x => x && x.id != null && x.id === id);
+  const sid = String(id); // search rows pass stringified ids; compare loosely
+  const i = state.songs.findIndex(x => x && x.id != null && String(x.id) === sid);
   if (i !== -1) return i;
-  return state.songs.findIndex(x => x && x.url === String(id));
+  return state.songs.findIndex(x => x && x.url === sid);
 }
 
 function currentSongUri(t) {
@@ -6180,9 +6256,15 @@ function remapCurrentIndex(prevUri) {
 }
 
 function folderApplyToLibrary() {
+  // Skip only when the folder catalog is provably unchanged (rev AND size).
+  // A direct tracks.set() without a rev bump still triggers a rebuild via size.
+  if (folderApplyToLibrary._rev === folderState.rev && folderApplyToLibrary._size === folderState.tracks.size && state.songs.length > 0) return;
+  folderApplyToLibrary._rev = folderState.rev;
+  folderApplyToLibrary._size = folderState.tracks.size;
   const prevUri = currentSongUri(state.songs[state.currentIndex]);
   state.songs = state.songs.filter(s => s.source !== "folder").concat(folderSongs());
   remapCurrentIndex(prevUri);
+  bumpSongsRev();
   if (typeof refreshBadges === "function") refreshBadges();
 }
 
@@ -6193,7 +6275,13 @@ function persistFolderRoots() {
 let folderMergeTimer = null;
 function folderMergeSchedule() {
   if (folderMergeTimer) return;
-  folderMergeTimer = setTimeout(() => { folderMergeTimer = null; persistFolderSongs(); folderApplyToLibrary(); }, 900);
+  // LIGHT merge during a walk: apply new tracks to the visible library only.
+  // Persisting 10k tracks to IndexedDB happens exactly ONCE at scan done —
+  // anything more is O(n²) and made big-library scans laggy.
+  folderMergeTimer = setTimeout(() => {
+    folderMergeTimer = null;
+    folderApplyToLibrary();
+  }, 2000);
 }
 function folderMergeNow() {
   if (folderMergeTimer) { clearTimeout(folderMergeTimer); folderMergeTimer = null; }
@@ -6206,8 +6294,8 @@ function persistFolderSongs() {
   const all = folderSongs();
   let i = 0;
   const step = () => {
-    const slice = all.slice(i, i + 400);
-    i += 400;
+    const slice = all.slice(i, i + 1000);
+    i += 1000;
     if (slice.length) folderDbPut("tracks", slice).catch(() => {}).then(step);
   };
   step();
@@ -6246,6 +6334,7 @@ async function folderInit() {
     console.warn("folderInit:", e);
   }
   folderState.loading = false;
+  folderApplyToLibrary._rev = undefined; // fresh catalog load → apply must run once
   folderApplyToLibrary();
   if (typeof renderLibraryTab === "function") renderLibraryTab();
 }
@@ -6300,9 +6389,11 @@ window.onFolderScanProgress = function(p) {
     folderState.tracks.set(s.url, s);
     changed = true;
   });
+  if (changed) folderState.rev++;
 
   if (p.phase === "done") {
     (p.removedUris || []).forEach(u => folderState.tracks.delete(u));
+    if (p.removedCount || 0) folderState.rev++;
     st.done = true;
     st.running = false;
     const root = folderRootByUri(uri);
@@ -6338,6 +6429,7 @@ function removeFolderRoot(uri) {
   if (!root) return;
   let n = 0;
   folderState.tracks.forEach((t, key) => { if (t.rootUri === uri) { folderState.tracks.delete(key); n++; } });
+  if (n > 0) folderState.rev++;
   folderState.roots = folderState.roots.filter(r => r.uri !== uri);
   persistFolderRoots();
   persistFolderSongs();
@@ -6483,7 +6575,7 @@ function renderFolderRootsBrowser() {
   const target = document.getElementById("library-render-target");
   if (!target) return;
 
-  if (folderState.roots.length === 0 && Object.keys(buildFolderIndex()).length === 0) {
+  if (folderState.roots.length === 0 && Object.keys(buildFolderIndexCached()).length === 0) {
     target.innerHTML = `
       <div class="empty-state-craft">
         <div class="empty-state-illustration" style="display:flex; align-items:center; justify-content:center;">
@@ -6539,7 +6631,7 @@ function renderFolderRootsBrowser() {
   });
 
   // Legacy (device scan / file imports) still grouped by on-device folders
-  const legacy = buildFolderIndex();
+  const legacy = buildFolderIndexCached();
   const legacyNames = folderState.roots.length > 0 ? Object.keys(legacy).filter(k => k !== "Library" || legacy[k].length) : Object.keys(legacy);
   if (legacyNames.length > 0) {
     html += `<div class="folder-section-label">OTHER FOLDERS (DEVICE SCAN & IMPORTS)</div>`;
@@ -6724,7 +6816,13 @@ function showSearchSheet() {
   buildSearchResults("");
 }
 
+let globalSearchTimer = null;
 function buildSearchResults(q) {
+  clearTimeout(globalSearchTimer);
+  globalSearchTimer = setTimeout(() => runGlobalSearch(q), 160); // debounce keystrokes
+}
+
+function runGlobalSearch(q) {
   const holder = document.getElementById("search-global-results");
   if (!holder) return;
   q = (q || "").trim().toLowerCase();
@@ -6732,13 +6830,18 @@ function buildSearchResults(q) {
     holder.innerHTML = `<div style="padding: 26px 16px; text-align: center; color: var(--text-tertiary); font-size: 12px;">Type to search your library — songs, albums, artists and folders</div>`;
     return;
   }
-  const songs = state.songs.filter(s => !s.virtual && (
-    s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) ||
-    s.album.toLowerCase().includes(q) || (s.genre || "").toLowerCase().includes(q)));
-  const albums = [...new Set(state.songs.filter(s => !s.virtual).map(s => s.album).filter(Boolean))].filter(a => a.toLowerCase().includes(q));
-  const artists = [...new Set(state.songs.map(s => s.artist).filter(Boolean))].filter(a => a.toLowerCase().includes(q));
-  const folders = folderState.roots.map(r => ({ ...r, k: "folder" })).filter(r => r.name.toLowerCase().includes(q));
-  const folderS = folderSongs().filter(s => (s.folderPath || "").toLowerCase().includes(q) && s.artist.toLowerCase().includes(q) === false && !s.album.toLowerCase().includes(q)); // files in matching folders
+  const songs = [];
+  for (const s of libraryTracks()) {
+    if (s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) ||
+        s.album.toLowerCase().includes(q) || (s.genre || "").toLowerCase().includes(q)) {
+      songs.push(s);
+      if (songs.length >= 80) break; // capped per group
+    }
+  }
+  const albums = [...new Set(libraryTracks().map(s => s.album).filter(Boolean))].filter(a => a.toLowerCase().includes(q)).slice(0, 12);
+  const artists = [...new Set(state.songs.map(s => s.artist).filter(Boolean))].filter(a => a.toLowerCase().includes(q)).slice(0, 12);
+  const folders = folderState.roots.map(r => ({ ...r, k: "folder" })).filter(r => r.name.toLowerCase().includes(q)).slice(0, 8);
+
 
   let html = "";
   if (songs.length === 0 && albums.length === 0 && artists.length === 0 && folders.length === 0) {
@@ -6746,8 +6849,8 @@ function buildSearchResults(q) {
   }
   if (songs.length) {
     html += `<div class="search-group-label">SONGS (${songs.length})</div>`;
-    html += songs.slice(0, 30).map(s => `
-      <div class="search-result-row" onclick="playSongFromSearch(${state.songs.indexOf(s)})">
+    html += songs.map(s => `
+      <div class="search-result-row" onclick="playSongFromSearch('${s.id}')">
         <div class="folder-row-ico"><img src="${escAttr(s.artwork || "artwork/default.png")}" alt=""></div>
         <div style="flex:1; min-width:0;">
           <div style="font-size: 13px; font-weight: 600; overflow:hidden; text-overflow: ellipsis; white-space:nowrap;">${escHtml(s.title)}</div>
@@ -6785,7 +6888,9 @@ function buildSearchResults(q) {
   holder.innerHTML = html;
 }
 
-function playSongFromSearch(idx) {
+function playSongFromSearch(songId) {
+  const idx = resolveSongByID(String(songId));
+  if (idx === -1) { displayToast("That track is no longer in the library"); return; }
   dismissAllSheets();
   loadTrack(idx, true);
 }
@@ -6885,7 +6990,7 @@ function playFolderTracks(folderPath, shuffle) {
   displayToast(`Playing folder: ${dirBaseName(folderPath)}`);
 }
 
-function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — import files or scan your device", targetEl = null) {
+function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — import files or scan your device", targetEl = null, opts = null) {
   const target = targetEl || document.getElementById("library-render-target");
   target.innerHTML = "";
 
@@ -6918,11 +7023,17 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
 
   const listEl = document.createElement("div");
   listEl.className = "song-rows-catalog";
-  catalogCtx = { tracks, listEl, offset: 0 };
+  catalogCtx = { tracks, listEl, offset: 0, opts: opts || null };
   buildCatalogRows(0, Math.min(tracks.length, CATALOG_CHUNK));
-  if (tracks.length > CATALOG_CHUNK) appendCatalogSentinel(listEl);
-  syncCatalogObserver();
+  if (tracks.length > CATALOG_CHUNK) appendLoadMoreSentinel(listEl, "rows");
+  syncLoadMoreObservers();
   target.appendChild(listEl);
+  if (opts && opts.footerHtml) {
+    const foot = document.createElement("div");
+    foot.className = "catalog-footer-note";
+    foot.innerHTML = opts.footerHtml;
+    target.appendChild(foot);
+  }
 }
 
 // ---- Virtualized catalog: only ~80 rows mounted; the rest stream in on scroll.
@@ -6930,17 +7041,10 @@ const CATALOG_CHUNK = 80;
 let catalogCtx = null;
 let catalogIO = null;
 
-function buildSongRow(s, rowIndex) {
-  const isPlayingThis = state.songs[state.currentIndex]?.id === s.id && state.songs[state.currentIndex]?.id != null;
-  const row = document.createElement("div");
-  row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
-  row.dataset.songId = s.id;
-  row.dataset.path = s.path || s.url || "";
-  row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
+function songRowLeadHtml(s, rowIndex) {
   const ext = (s.path || "").split(".").pop().toUpperCase();
   const formatLabel = s.virtual ? "CUE" : ((ext === "WAV" || ext === "FLAC" || ext === "MP3" || ext === "M4A") ? ext : "AUDIO");
-
-  row.innerHTML = `
+  return `
     <div class="row-artwork-frame">
       <img src="${s.artwork || 'artwork/default.png'}" class="row-artwork-img" alt="${s.title}" loading="lazy" decoding="async">
       <div class="row-live-eq-badge">
@@ -6958,7 +7062,11 @@ function buildSongRow(s, rowIndex) {
         <span>${s.album}</span>
         ${(s.play_count || 0) >= 3 ? `<span class="plays-count-chip"><svg class="icon icon-xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>${s.play_count} plays</span>` : ""}
       </div>
-    </div>
+    </div>`;
+}
+
+function songRowTrailingHtml(s) {
+  return `
     <div class="row-trailing-group">
       <span class="row-duration-digits">${formatDuration(s.duration)}</span>
       <button class="btn-inline-heart ${s.favorite ? 'liked' : ''}" onclick="event.stopPropagation(); toggleRowFavorite(${s.id})">
@@ -6967,15 +7075,27 @@ function buildSongRow(s, rowIndex) {
       <button class="btn-action-tap" onclick="event.stopPropagation(); triggerTrackMenu(state.songs.find(x => x && x.id != null && x.id === ${s.id}))">
         <svg class="icon icon-md" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
       </button>
-    </div>
-  `;
+    </div>`;
+}
+
+function buildSongRow(s, rowIndex) {
+  const ctx = catalogCtx;
+  const opts = ctx ? ctx.opts : null;
+  const isPlayingThis = state.songs[state.currentIndex]?.id === s.id && state.songs[state.currentIndex]?.id != null;
+  const row = document.createElement("div");
+  row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
+  row.dataset.songId = s.id;
+  row.dataset.path = s.path || s.url || "";
+  row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
+
+  row.innerHTML = (opts && opts.leadHtml ? opts.leadHtml(s, rowIndex) : songRowLeadHtml(s, rowIndex))
+    + (opts && opts.noAlbumLine ? `<div class="row-meta-content"><div class="row-title-line">${s.title}</div><div class="row-details-line"><span>${s.artist}</span></div></div>` : "")
+    + songRowTrailingHtml(s);
 
   row.onclick = () => {
     state.queue = []; // a direct tap resets "up next" — no rogue advances
     const idx = resolveSongIndex(s);
-    if (idx !== -1) {
-      loadTrack(idx, true);
-    }
+    if (idx !== -1) loadTrack(idx, true);
   };
   if (state.songs[state.currentIndex] && s.id != null && s.id === state.songs[state.currentIndex].id) {
     const eq = document.createElement("span");
@@ -6995,15 +7115,17 @@ function buildCatalogRows(from, to) {
   ctx.offset = Math.max(ctx.offset, to);
 }
 
-function appendCatalogSentinel(listEl) {
-  let sent = listEl.querySelector(".catalog-sentinel");
+function appendLoadMoreSentinel(container, kind) {
+  let sent = container.querySelector(".catalog-sentinel");
   if (!sent) {
     sent = document.createElement("div");
     sent.className = "catalog-sentinel";
     sent.setAttribute("aria-hidden", "true");
-    listEl.appendChild(sent);
+    sent.dataset.loader = kind || "rows";
+    container.appendChild(sent);
   } else {
-    listEl.appendChild(sent); // keep it last
+    sent.dataset.loader = kind || "rows";
+    container.appendChild(sent); // keep it last
   }
 }
 
@@ -7018,17 +7140,62 @@ function loadMoreCatalogRows() {
     const sent = ctx.listEl.querySelector(".catalog-sentinel");
     if (sent) sent.remove();
   } else {
-    appendCatalogSentinel(ctx.listEl);
+    appendLoadMoreSentinel(ctx.listEl, "rows");
   }
-  syncCatalogObserver();
+  syncLoadMoreObservers();
   return to - from;
 }
 
-function syncCatalogObserver() {
+// ---- Windowed GRIDS (albums, artists, folders): 36 cards mounted, stream rest.
+const GRID_CHUNK = 36;
+let gridCtx = null;
+
+function renderWindowedGrid(container, items, cellHtmlFn, emptyHtml) {
+  container.innerHTML = "";
+  if (!items || items.length === 0) {
+    container.innerHTML = emptyHtml || "";
+    return;
+  }
+  gridCtx = { container, items, cellHtmlFn, offset: 0 };
+  buildGridCells(0, Math.min(items.length, GRID_CHUNK));
+  if (items.length > GRID_CHUNK) appendLoadMoreSentinel(container, "grid");
+  syncLoadMoreObservers();
+}
+
+function buildGridCells(from, to) {
+  const ctx = gridCtx;
+  if (!ctx) return;
+  to = Math.min(to, ctx.items.length);
+  for (let i = from; i < to; i++) {
+    const cell = document.createElement("div");
+    cell.className = "album-unit-box";
+    cell.dataset.entryIdx = i;
+    cell.innerHTML = ctx.cellHtmlFn(ctx.items[i], i);
+    ctx.container.appendChild(cell);
+  }
+  ctx.offset = Math.max(ctx.offset, to);
+}
+
+function loadMoreGridRows() {
+  const ctx = gridCtx;
+  if (!ctx || ctx.offset >= ctx.items.length) return 0;
+  const from = ctx.offset;
+  const to = Math.min(from + GRID_CHUNK, ctx.items.length);
+  buildGridCells(from, to);
+  if (ctx.offset >= ctx.items.length) {
+    const sent = ctx.container.querySelector(".catalog-sentinel");
+    if (sent) sent.remove();
+  } else {
+    appendLoadMoreSentinel(ctx.container, "grid");
+  }
+  syncLoadMoreObservers();
+  return to - from;
+}
+
+function syncLoadMoreObservers() {
   if (!catalogIO) return;
   catalogIO.disconnect();
-  const sent = document.querySelector(".catalog-sentinel");
-  if (sent) catalogIO.observe(sent);
+  document.querySelectorAll(".catalog-sentinel").forEach(sent => catalogIO.observe(sent));
 }
 
 function attachCatalogLoadMore() {
@@ -7036,48 +7203,47 @@ function attachCatalogLoadMore() {
   window.__catalogIOAttached = true;
   if (window.IntersectionObserver) {
     catalogIO = new IntersectionObserver(entries => {
-      entries.forEach(en => { if (en.isIntersecting) loadMoreCatalogRows(); });
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        if (en.target.dataset.loader === "grid") loadMoreGridRows();
+        else loadMoreCatalogRows();
+      });
     }, { root: document.getElementById("library-scroll-container"), rootMargin: "600px 0px" });
-    syncCatalogObserver();
+    syncLoadMoreObservers();
   } else {
     const sc = document.getElementById("library-scroll-container");
     if (sc) sc.addEventListener("scroll", () => {
-      const sent = document.querySelector(".catalog-sentinel");
-      if (!sent) return;
-      const r = sent.getBoundingClientRect();
-      if (r.top < (window.innerHeight || 800) * 1.5) loadMoreCatalogRows();
+      const sents = document.querySelectorAll(".catalog-sentinel");
+      sents.forEach(sent => {
+        const r = sent.getBoundingClientRect();
+        if (r.top < (window.innerHeight || 800) * 1.5) {
+          if (sent.dataset.loader === "grid") loadMoreGridRows(); else loadMoreCatalogRows();
+        }
+      });
     }, { passive: true });
   }
 }
 
 function renderAlbumCards() {
   const target = document.getElementById("library-render-target");
-  const albumMap = {};
-  state.songs.filter(s => !s.virtual).forEach(s => {
-    if (!albumMap[s.album]) albumMap[s.album] = [];
-    albumMap[s.album].push(s);
-  });
-
   target.innerHTML = `<div class="album-cards-grid" id="albums-cards-container"></div>`;
   const grid = document.getElementById("albums-cards-container");
-
-  Object.keys(albumMap).forEach(name => {
-    const list = albumMap[name];
-    const first = list[0];
-    const card = document.createElement("div");
-    card.className = "album-unit-box";
-    card.innerHTML = `
+  const entries = albumIndexEntries();
+  renderWindowedGrid(grid, entries, (e) => {
+    const first = e.songs[0];
+    return `
       <div class="album-thumb-container">
-        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${name}">
+        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
       </div>
-      <div class="album-title-text">${name}</div>
-      <div class="album-artist-text">${first.artist} • ${list.length} tracks</div>
-    `;
-    card.onclick = () => {
-      renderAlbumDetailView(name, list);
-    };
-    grid.appendChild(card);
-  });
+      <div class="album-title-text">${escHtml(e.name)}</div>
+      <div class="album-artist-text">${escHtml(first.artist)} • ${e.songs.length} tracks</div>`;
+  }, "");
+  grid.addEventListener("click", (ev) => {
+    const card = ev.target.closest(".album-unit-box");
+    if (!card) return;
+    const e = entries[parseInt(card.dataset.entryIdx, 10)];
+    if (e) renderAlbumDetailView(e.name, e.songs);
+  }, { passive: true });
 }
 
 function renderAlbumDetailView(albumName, list) {
@@ -7112,38 +7278,12 @@ function renderAlbumDetailView(albumName, list) {
   `;
 
   const trackListContainer = document.getElementById("drilldown-track-list");
-  const listEl = document.createElement("div");
-  listEl.className = "song-rows-catalog";
-
-  list.forEach((s, idx) => {
-    const isPlayingThis = state.songs[state.currentIndex]?.id === s.id;
-    const row = document.createElement("div");
-    row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
-    row.dataset.songId = s.id;
-    row.style.animationDelay = `${Math.min(idx * 12, 480)}ms`;
-    row.innerHTML = `
-      <span style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); width: 22px; text-align: center;">${idx + 1 < 10 ? '0' : ''}${idx + 1}</span>
-      <div class="row-meta-content">
-        <div class="row-title-line">${s.title}</div>
-        <div class="row-details-line"><span>${s.artist}</span></div>
-      </div>
-      <div class="row-trailing-group">
-        <span class="row-duration-digits">${formatDuration(s.duration)}</span>
-        <button class="btn-inline-heart ${s.favorite ? 'liked' : ''}" onclick="event.stopPropagation(); toggleRowFavorite(${s.id})">
-          <svg class="icon icon-md" viewBox="0 0 24 24">${s.favorite ? '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/>' : '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>'}</svg>
-        </button>
-      </div>
-    `;
-
-    row.onclick = () => {
-      const i = resolveSongIndex(s);
-      if (i !== -1) loadTrack(i, true);
-    };
-
-    listEl.appendChild(row);
+  // Windowed rows: an album's track list streams in like the main catalog.
+  renderSongsCatalog(list, "No tracks", trackListContainer, {
+    leadHtml: (s, idx) => `
+      <span style="font-size: 11px; font-family: var(--font-mono); color: var(--text-tertiary); width: 22px; text-align: center; align-self: center;">${idx + 1 < 10 ? '0' : ''}${idx + 1}</span>`,
+    noAlbumLine: true
   });
-
-  trackListContainer.appendChild(listEl);
 }
 
 function playAlbumTracks(albumName, shuffle = false) {
@@ -7162,37 +7302,30 @@ function playAlbumTracks(albumName, shuffle = false) {
 
 function renderArtistCards() {
   const target = document.getElementById("library-render-target");
-  const artistMap = {};
-  state.songs.filter(s => !s.virtual).forEach(s => {
-    if (!artistMap[s.artist]) artistMap[s.artist] = [];
-    artistMap[s.artist].push(s);
-  });
-
   target.innerHTML = `<div class="album-cards-grid" id="artists-cards-container"></div>`;
   const grid = document.getElementById("artists-cards-container");
-
-  Object.keys(artistMap).forEach(name => {
-    const list = artistMap[name];
-    const first = list[0];
-    const card = document.createElement("div");
-    card.className = "album-unit-box";
-    card.innerHTML = `
+  const entries = artistIndexEntries();
+  renderWindowedGrid(grid, entries, (e) => {
+    const first = e.songs[0];
+    return `
       <div class="album-thumb-container" style="border-radius: 50%;">
-        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${name}">
+        <img src="${first.artwork || 'artwork/default.png'}" class="album-thumb-image" alt="${escAttr(e.name)}" loading="lazy" decoding="async">
       </div>
-      <div class="album-title-text" style="text-align: center;">${name}</div>
-      <div class="album-artist-text" style="text-align: center;">${list.length} songs</div>
-    `;
-    card.onclick = () => {
-      renderArtistDetailView(name, list);
-    };
-    grid.appendChild(card);
-  });
+      <div class="album-title-text" style="text-align: center;">${escHtml(e.name)}</div>
+      <div class="album-artist-text" style="text-align: center;">${e.songs.length} songs</div>`;
+  }, "");
+  grid.addEventListener("click", (ev) => {
+    const card = ev.target.closest(".album-unit-box");
+    if (!card) return;
+    const e = entries[parseInt(card.dataset.entryIdx, 10)];
+    if (e) renderArtistDetailView(e.name, e.songs);
+  }, { passive: true });
 }
 
 function renderArtistDetailView(artistName, list) {
   const target = document.getElementById("library-render-target");
   const first = list[0];
+  if (!first) return;
 
   target.innerHTML = `
     <div style="padding: 10px 14px 4px 14px;">
@@ -7248,24 +7381,35 @@ function toggleRowFavorite(id) {
   }
 }
 
+let instantSearchTimer = null;
 function handleInstantSearch(q) {
   const clearBtn = document.getElementById("search-clear-btn");
   clearBtn.style.display = q ? "block" : "none";
-
+  clearTimeout(instantSearchTimer);
   if (!q.trim()) {
     renderLibraryTab();
     return;
   }
+  instantSearchTimer = setTimeout(() => runInstantSearch(q), 160); // debounce keystrokes
+}
 
+function runInstantSearch(q) {
   const query = q.toLowerCase().trim();
-  const res = state.songs.filter(s => 
-    s.title.toLowerCase().includes(query) ||
-    s.artist.toLowerCase().includes(query) ||
-    s.album.toLowerCase().includes(query) ||
-    (s.genre && s.genre.toLowerCase().includes(query))
-  );
-
-  renderSongsCatalog(res, `No matches for "${q}"`);
+  if (!query) { renderLibraryTab(); return; }
+  const res = [];
+  for (const s of state.songs) {
+    if (s.title.toLowerCase().includes(query) ||
+        s.artist.toLowerCase().includes(query) ||
+        s.album.toLowerCase().includes(query) ||
+        (s.genre && s.genre.toLowerCase().includes(query))) {
+      res.push(s);
+      if (res.length >= 150) break; // cap: instant results, not a 10k scan per keypress
+    }
+  }
+  const over = res.length >= 150;
+  renderSongsCatalog(res, `No matches for "${q}"`, null, {
+    footerHtml: over ? `<div class="catalog-footer-note">Showing first 150 of many matches — keep typing to narrow</div>` : ""
+  });
 }
 
 function clearSearchFilter() {
@@ -7296,6 +7440,7 @@ window.onAudioFilesImported = function(importedJson) {
     state.songs.unshift(s);
   });
   remapCurrentIndex(prevUri);
+  bumpSongsRev();
   persistState();
   refreshBadges();
   renderLibraryTab();
@@ -7341,6 +7486,7 @@ function receiveHtmlFiles(fileList) {
       const prevUri = currentSongUri(state.songs[state.currentIndex]);
       state.songs.unshift(rec);
       remapCurrentIndex(prevUri);
+      bumpSongsRev();
 
       count++;
       if (count === files.length) {
@@ -7389,6 +7535,7 @@ function invokeDeviceScan() {
       });
       state.songs = merged;
       remapCurrentIndex(prevUri);
+      bumpSongsRev();
       loadCueSheets();
       persistState();
       refreshBadges();
@@ -7409,6 +7556,7 @@ function invokeDeviceScan() {
 function resetLibraryCollection() {
   if (confirm("Clear the music library? Imported and indexed tracks will be removed from the app. Your files stay on the device.")) {
     state.songs = [];
+    bumpSongsRev();
     persistState();
     refreshBadges();
     renderLibraryTab();

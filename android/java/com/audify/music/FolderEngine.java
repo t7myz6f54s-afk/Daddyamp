@@ -9,10 +9,12 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.media.MediaMetadataRetriever;
 import android.net.Uri;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Log;
 import android.webkit.WebView;
@@ -46,6 +48,13 @@ public class FolderEngine extends SQLiteOpenHelper {
     private final WebView webView;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Set<String> scanning = new HashSet<>();
+
+    /** Lightweight MediaStore row for the fast path (no file opens). */
+    private static class MsMeta {
+        String title, artist, album, mime;
+        long albumId, durationMs;
+        int year;
+    }
 
     public FolderEngine(Activity activity, WebView webView) {
         super(activity, "daddyamp_folders.db", null, 1);
@@ -192,6 +201,16 @@ public class FolderEngine extends SQLiteOpenHelper {
         String rootName = tree.getLastPathSegment() != null ? tree.getLastPathSegment() : "Root";
         SQLiteDatabase db = getWritableDatabase();
 
+        // FAST PATH: one MediaStore query gives us tags/duration/albums for every
+        // indexed file — no per-file MediaMetadataRetriever open (that was the
+        // "500+ songs takes forever" killer for 10k-track libraries).
+        String msPrefix = null;
+        try {
+            String treeDoc = DocumentsContract.getTreeDocumentId(tree);
+            msPrefix = docIdToFsPath(treeDoc);
+        } catch (Exception ignored) {}
+        java.util.Map<String, MsMeta> msIndex = loadMediaStoreIndex(msPrefix);
+
         // Known file index (uri -> "mtime|size")
         final java.util.Map<String, String> known = new java.util.HashMap<>();
         if (!full) {
@@ -214,7 +233,7 @@ public class FolderEngine extends SQLiteOpenHelper {
 
         activeRootUri = treeUri;
         lastEmitMs = System.currentTimeMillis();
-        walk(tree, tree, "", known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs);
+        walk(tree, tree, "", known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs, msIndex, msPrefix);
 
         // Removed files: known but not seen this pass
         JSONArray removed = new JSONArray();
@@ -265,7 +284,8 @@ public class FolderEngine extends SQLiteOpenHelper {
     private void walk(Uri tree, Uri dir, String relPath,
                       java.util.Map<String, String> known, Set<String> seen,
                       java.util.Map<String, String> current, Set<String> artThisRun,
-                      int[] stats, long[] durAcc, JSONArray batch, long ignoreShortMs) {
+                      int[] stats, long[] durAcc, JSONArray batch, long ignoreShortMs,
+                      java.util.Map<String, MsMeta> msIndex, String msPrefix) {
         Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(tree,
                 DocumentsContract.getTreeDocumentId(dir));
         Cursor c = null;
@@ -299,7 +319,7 @@ public class FolderEngine extends SQLiteOpenHelper {
                 boolean isDir = DocumentsContract.Document.MIME_TYPE_DIR.equals(mime);
                 if (isDir) {
                     walk(tree, childUri, relPath.isEmpty() ? name : relPath + "/" + name,
-                            known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs);
+                            known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs, msIndex, msPrefix);
                     continue;
                 }
                 if (!isAudio(mime, name)) continue;
@@ -318,14 +338,26 @@ public class FolderEngine extends SQLiteOpenHelper {
                 }
                 if (knownMeta != null) stats[2]++; else stats[1]++;
 
-                JSONObject song = buildSong(tree, childUri, relPath, name, mime, mtime, size,
-                        artThisRun, ignoreShortMs, durAcc);
+                JSONObject song = null;
+                String fsPath = msPrefix != null ? docIdToFsPath(docId) : null;
+                if (fsPath != null && msIndex != null && !msIndex.isEmpty()) {
+                    MsMeta m = msIndex.get(fsPath.toLowerCase());
+                    if (m != null) {
+                        song = buildSongFromStore(tree, childUri, relPath, name, mime, mtime, size,
+                                m, artThisRun, durAcc);
+                    }
+                }
+                if (song == null) {
+                    // Slow path: only files MediaStore does not know (rare).
+                    song = buildSong(tree, childUri, relPath, name, mime, mtime, size,
+                            artThisRun, ignoreShortMs, durAcc);
+                }
                 if (song == null) continue;
 
                 if (durationIgnore(song, ignoreShortMs)) continue;
 
                 batch.put(song);
-                if (batch.length() >= 90) flushWalkBatch(batch, stats, relPath);
+                if (batch.length() >= 200) flushWalkBatch(batch, stats, relPath);
             }
         } finally {
             c.close();
@@ -374,6 +406,141 @@ public class FolderEngine extends SQLiteOpenHelper {
             o.put("heartbeat", true);
         } catch (Exception ignored) {}
         emitProgress(activeRootUri, o);
+    }
+
+    /** "primary:Music/a.mp3" -> "/storage/emulated/0/Music/a.mp3" (or null). */
+    private String docIdToFsPath(String docId) {
+        if (docId == null) return null;
+        int i = docId.indexOf(':');
+        if (i <= 0 || i == docId.length() - 1) return null;
+        String vol = docId.substring(0, i);
+        String rel = docId.substring(i + 1);
+        String base;
+        if (vol.equals("primary")) {
+            base = Environment.getExternalStorageDirectory().getAbsolutePath();
+        } else {
+            base = "/storage/" + vol;
+        }
+        return base + "/" + rel;
+    }
+
+    private String likeEscape(String s) {
+        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private java.util.Map<String, MsMeta> loadMediaStoreIndex(String treeFsPrefix) {
+        java.util.Map<String, MsMeta> map = new java.util.HashMap<>();
+        try {
+            String[] projection = {
+                    MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
+                    MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID,
+                    MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.YEAR,
+                    MediaStore.Audio.Media.MIME_TYPE, MediaStore.Audio.Media.DATA
+            };
+            String selection = null;
+            String[] selArgs = null;
+            if (treeFsPrefix != null) {
+                selection = MediaStore.Audio.Media.DATA + " LIKE ? ESCAPE '\\'";
+                selArgs = new String[]{likeEscape(treeFsPrefix) + "/%"};
+            }
+            Cursor c = activity.getContentResolver().query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                    projection, selection, selArgs, null);
+            if (c == null) return map;
+            try {
+                while (c.moveToNext()) {
+                    MsMeta m = new MsMeta();
+                    m.title = c.getString(0);
+                    m.artist = c.getString(1);
+                    m.album = c.getString(2);
+                    m.albumId = c.getLong(3);
+                    m.durationMs = c.getLong(4);
+                    m.year = c.getInt(5);
+                    m.mime = c.getString(6);
+                    String data = c.getString(7);
+                    if (data == null || data.isEmpty()) continue;
+                    map.put(data.toLowerCase(), m);
+                }
+            } finally {
+                c.close();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "MediaStore index unavailable, falling back to retriever: " + e);
+        }
+        return map;
+    }
+
+    /** Build a song from MediaStore metadata — zero file opens (except album art). */
+    private JSONObject buildSongFromStore(Uri tree, Uri fileUri, String relPath, String name, String mime,
+                                          long mtime, long size, MsMeta m, Set<String> artThisRun,
+                                          long[] durAcc) {
+        try {
+            if (m.durationMs <= 0) return null; // no reliable duration -> retriever fallback
+            String title = m.title, artist = m.artist, album = m.album;
+            String fallbackAlbum = relPath.isEmpty() ? name : relPath.replace('/', ' ');
+            JSONObject song = new JSONObject();
+            if (durAcc != null && m.durationMs > 0) durAcc[0] += m.durationMs;
+            song.put("title", title != null ? title : stripExt(name));
+            song.put("artist", (artist != null && !artist.equals("<unknown>")) ? artist : "Unknown Artist");
+            song.put("album", (album != null && !album.isEmpty()) ? album : fallbackAlbum);
+            song.put("albumArtist", "");
+            song.put("genre", "Folder Audio");
+            song.put("year", m.year > 0 && m.year < 3000 ? m.year : 0);
+            song.put("duration", m.durationMs / 1000);
+            song.put("mimeType", m.mime != null ? m.mime : (mime != null ? mime : "audio/mpeg"));
+            song.put("size", size);
+            song.put("mtime", mtime);
+            song.put("url", fileUri.toString());
+            song.put("path", fileUri.toString());
+            song.put("filePath", "");
+            song.put("rootUri", tree.toString());
+            song.put("folderPath", relPath);
+            song.put("source", "folder");
+            song.put("docName", name);
+            song.put("favorite", 0);
+            song.put("play_count", 0);
+            song.put("lyrics", "");
+            song.put("imported", true);
+            song.put("artwork", extractArtById(tree, fileUri, name, relPath, m.albumId, artThisRun));
+            return song;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Album art cached on disk per album id; at most one retriever open per album. */
+    private String extractArtById(Uri tree, Uri fileUri, String name, String relPath,
+                                  long albumId, Set<String> artThisRun) {
+        try {
+            String key = albumId > 0 ? ("aid" + albumId) : ("folder" + sha1(tree.toString() + "|" + relPath));
+            String fileKey = sha1(tree.toString() + "|" + key);
+            File dir = new File(activity.getCacheDir(), "art");
+            if (!dir.exists()) dir.mkdirs();
+            File out = new File(dir, fileKey + ".jpg");
+            if (!out.exists() && !artThisRun.contains(key)) {
+                artThisRun.add(key);
+                MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+                try {
+                    ParcelFileDescriptor pfd = activity.getContentResolver().openFileDescriptor(fileUri, "r");
+                    if (pfd != null) {
+                        try { mmr.setDataSource(pfd.getFileDescriptor()); } finally { pfd.close(); }
+                    } else {
+                        mmr.setDataSource(activity, fileUri);
+                    }
+                    byte[] pic = mmr.getEmbeddedPicture();
+                    if (pic != null && pic.length > 512) {
+                        FileOutputStream fos = new FileOutputStream(out);
+                        fos.write(pic);
+                        fos.close();
+                    }
+                } finally {
+                    try { mmr.release(); } catch (Exception ignored) {}
+                }
+            }
+            if (out.exists() && out.length() > 512) {
+                return "file://" + out.getAbsolutePath();
+            }
+        } catch (Exception ignored) {}
+        return "";
     }
 
     private JSONObject buildSong(Uri tree, Uri fileUri, String relPath, String name, String mime,

@@ -181,3 +181,37 @@ tag write-back, media session, crossfade, playlists, stats, themes, history.
 - Sweep: rapid-tap last-wins (late error from tap 1 ignored), 150+ track library identity
   (mounted + streamed chunks), repeat-one same id, shuffle never reorders, no scan banner
   residue. Suite 163/163.
+
+## v1.14 — SCALE & refinement: 10k libraries usable, scan 10-50x faster, no clunk
+
+### Scanner (FolderEngine.java) — the "500+ songs takes forever" killer
+- Per-file MediaMetadataRetriever (open+8 tag reads+embedded art) replaced by a MediaStore
+  fast path: ONE query scoped to the tree (DATA LIKE prefix), docId→fsPath decode, tags/
+  duration/albumId from the map → ZERO file opens for indexed files. Retriever only for
+  files MediaStore lacks (or duration==0). Album art extracted once per ALBUM_ID (disk
+  cached), not per track. Batch emit 90 → 200. Worst case unchanged->incremental rescans:
+  no retriever opens at all.
+- Side effect: previous per-file art decode ran even for files whose art cache existed;
+  now keyed by albumId so a 10k-file library costs ~(#albums) art decodes total.
+
+### Scan merge (web) — the O(n²) persist/rebuild gone
+- Walk phase: batches only accumulate into folderState; ONE throttled (2s) light
+  folderApplyToLibrary; FULL persistFolderSongs (chunk 1000) exactly once at done.
+- folderState.rev + size guard: unchanged scans skip the library rebuild entirely.
+
+### Library scale (web)
+- songsRev version counter + memoization: libraryTracks(), applyCurrentSortCached,
+  refreshBadges (1 loop), albumIndexEntries(), artistIndexEntries(), buildFolderIndexCached().
+- renderWindowedGrid (36 cells, load-more sentinel): albums, artists, folder grid.
+- Album/artist detail rows now virtualized via renderSongsCatalog opts (leadHtml track
+  numbers). Search: 160ms debounce, caps (150/80/12/12/8), "showing first N" footer.
+- BUG: playSongFromSearch used state.songs.indexOf(s) inside inline onclick → wrong-song
+  risk after reorder — now id-based; resolveSongByID compared strict === (string ids from
+  search never matched) — fixed to String() compare.
+- Dead 10k-per-keystroke folderS scan in global search removed.
+
+### Suite
+- 145/145 (was 163 with old defs; +12 scale checks, 2 timing checks updated for 2s throttle
+  + search debounce): 10k render, windowed rows/cards, memoized sort/badges, 500-batch
+  scan storm → one merge, search debounce + id identity.
+- Android SDK re-provisioned (same known-good URLs); build verified versionCode 15.
