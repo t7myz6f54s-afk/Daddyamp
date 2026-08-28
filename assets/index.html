@@ -3720,7 +3720,9 @@ function loadPersistedData() {
 
 function persistState() {
   try {
-    const imported = state.songs.filter(s => s.imported && !s.virtual);
+    // Keep localStorage tiny. 10k device/folder tracks exceed WebView quota and
+    // made scanned libraries disappear after restart. Large catalogs live in IndexedDB.
+    const imported = state.songs.filter(s => s.imported && !s.virtual && s.source !== "folder" && s.source !== "device");
     localStorage.setItem("daddyamp_imported_songs", JSON.stringify(imported));
     const likedIds = state.songs.filter(s => s.favorite).map(s => s.id);
     localStorage.setItem("daddyamp_liked_ids", JSON.stringify(likedIds));
@@ -4125,7 +4127,7 @@ function updateActivePlayingRowInDOM() {
   const rows = document.querySelectorAll(".song-catalog-row");
   rows.forEach(row => {
     const rowId = parseInt(row.dataset.songId, 10);
-    row.classList.toggle("playing-now", String(row.dataset.songId) === String(currentSongId));
+    row.classList.toggle("playing-now", state.isPlaying && String(row.dataset.songId) === String(currentSongId));
   });
 }
 
@@ -6222,7 +6224,7 @@ function syncFluidSettingsUI() {
    ========================================================================= */
 
 const FOLDER_DB_NAME = "daddyamp_db";
-const FOLDER_DB_VERSION = 1;
+const FOLDER_DB_VERSION = 2;
 const folderDb = { db: null };
 
 function folderDbOpen() {
@@ -6234,6 +6236,7 @@ function folderDbOpen() {
       const db = e.target.result;
       if (!db.objectStoreNames.contains("roots")) db.createObjectStore("roots", { keyPath: "uri" });
       if (!db.objectStoreNames.contains("tracks")) db.createObjectStore("tracks", { keyPath: "url" });
+      if (!db.objectStoreNames.contains("deviceTracks")) db.createObjectStore("deviceTracks", { keyPath: "path" });
     };
     req.onsuccess = () => { folderDb.db = req.result; resolve(req.result); };
     req.onerror = () => reject(req.error || new Error("indexeddb-open-failed"));
@@ -6255,6 +6258,7 @@ function folderDbTx(store, mode, fn) {
 function folderDbGetAll(store) { return folderDbTx(store, "readonly", os => os.getAll()); }
 function folderDbPut(store, items) { return folderDbTx(store, "readwrite", os => { (Array.isArray(items) ? items : [items]).forEach(i => os.put(i)); }); }
 function folderDbDelete(store, keys) { return folderDbTx(store, "readwrite", os => { (Array.isArray(keys) ? keys : [keys]).forEach(k => os.delete(k)); }); }
+function folderDbClear(store) { return folderDbTx(store, "readwrite", os => os.clear()); }
 
 const folderState = {
   roots: [],      // { uri, name, enabled, lastScan, accessLost }
@@ -6410,7 +6414,19 @@ function persistFolderSongs() {
     i += 1000;
     if (slice.length) folderDbPut("tracks", slice).catch(() => {}).then(step);
   };
-  step();
+  folderDbClear("tracks").catch(() => {}).then(step);
+}
+
+function persistDeviceSongs(deviceSongs) {
+  if (!window.indexedDB) return;
+  const all = (deviceSongs || []).map(s => ({ ...s, source: "device", imported: true }));
+  let i = 0;
+  const step = () => {
+    const slice = all.slice(i, i + 1000);
+    i += 1000;
+    if (slice.length) folderDbPut("deviceTracks", slice).catch(() => {}).then(step);
+  };
+  folderDbClear("deviceTracks").catch(() => {}).then(step);
 }
 
 async function folderInit() {
@@ -6420,8 +6436,14 @@ async function folderInit() {
     if (window.indexedDB) {
       const roots = await folderDbGetAll("roots");
       const tracks = await folderDbGetAll("tracks");
+      const deviceTracks = await folderDbGetAll("deviceTracks").catch(() => []);
       folderState.roots = (roots || []).map(r => ({ ...r }));
       folderState.tracks = new Map((tracks || []).map(t => [t.url, t]));
+      if (Array.isArray(deviceTracks) && deviceTracks.length) {
+        const manual = state.songs.filter(s => s.source !== "device" && s.source !== "folder");
+        state.songs = manual.concat(deviceTracks.map(t => ({ ...t, source: "device", imported: true })));
+        bumpSongsRev();
+      }
     }
     if (isAndroid && window.AndroidBridge.getFolderRoots) {
       let native = [];
@@ -7143,8 +7165,8 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
   catalogCtx = { tracks, listEl, offset: 0, opts: opts || null };
   buildCatalogRows(0, Math.min(tracks.length, CATALOG_CHUNK));
   if (tracks.length > CATALOG_CHUNK) appendLoadMoreSentinel(listEl, "rows");
-  syncLoadMoreObservers();
   target.appendChild(listEl);
+  syncLoadMoreObservers();
   if (opts && opts.footerHtml) {
     const foot = document.createElement("div");
     foot.className = "catalog-footer-note";
@@ -7154,7 +7176,7 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
 }
 
 // ---- Virtualized catalog: only ~80 rows mounted; the rest stream in on scroll.
-const CATALOG_CHUNK = 80;
+const CATALOG_CHUNK = 160;
 let catalogCtx = null;
 let catalogIO = null;
 
@@ -7198,7 +7220,7 @@ function songRowTrailingHtml(s) {
 function buildSongRow(s, rowIndex) {
   const ctx = catalogCtx;
   const opts = ctx ? ctx.opts : null;
-  const isPlayingThis = String(state.songs[state.currentIndex]?.id) === String(s.id) && state.songs[state.currentIndex]?.id != null;
+  const isPlayingThis = state.isPlaying && String(state.songs[state.currentIndex]?.id) === String(s.id) && state.songs[state.currentIndex]?.id != null;
   const row = document.createElement("div");
   row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
   row.dataset.songId = s.id;
@@ -7214,7 +7236,7 @@ function buildSongRow(s, rowIndex) {
     const idx = resolveSongIndex(s);
     if (idx !== -1) loadTrack(idx, true);
   };
-  if (state.songs[state.currentIndex] && s.id != null && String(s.id) === String(state.songs[state.currentIndex].id)) {
+  if (state.isPlaying && state.songs[state.currentIndex] && s.id != null && String(s.id) === String(state.songs[state.currentIndex].id)) {
     const eq = document.createElement("span");
     eq.className = "np-eq";
     eq.setAttribute("aria-hidden", "true");
@@ -7318,6 +7340,16 @@ function syncLoadMoreObservers() {
 function attachCatalogLoadMore() {
   if (window.__catalogIOAttached) return;
   window.__catalogIOAttached = true;
+  const sc = document.getElementById("library-scroll-container");
+  const scrollPump = () => {
+    document.querySelectorAll(".catalog-sentinel").forEach(sent => {
+      const r = sent.getBoundingClientRect();
+      if (r.top < (window.innerHeight || 800) * 1.8) {
+        if (sent.dataset.loader === "grid") loadMoreGridRows(); else loadMoreCatalogRows();
+      }
+    });
+  };
+  if (sc) sc.addEventListener("scroll", scrollPump, { passive: true });
   if (window.IntersectionObserver) {
     catalogIO = new IntersectionObserver(entries => {
       entries.forEach(en => {
@@ -7327,17 +7359,6 @@ function attachCatalogLoadMore() {
       });
     }, { root: document.getElementById("library-scroll-container"), rootMargin: "600px 0px" });
     syncLoadMoreObservers();
-  } else {
-    const sc = document.getElementById("library-scroll-container");
-    if (sc) sc.addEventListener("scroll", () => {
-      const sents = document.querySelectorAll(".catalog-sentinel");
-      sents.forEach(sent => {
-        const r = sent.getBoundingClientRect();
-        if (r.top < (window.innerHeight || 800) * 1.5) {
-          if (sent.dataset.loader === "grid") loadMoreGridRows(); else loadMoreCatalogRows();
-        }
-      });
-    }, { passive: true });
   }
 }
 
@@ -7647,12 +7668,14 @@ function invokeDeviceScan() {
           favorite: 0,
           play_count: 0,
           lyrics: "",
-          imported: true
+          imported: true,
+          source: "device"
         });
       });
       state.songs = merged;
       remapCurrentIndex(prevUri);
       bumpSongsRev();
+      persistDeviceSongs(merged);
       loadCueSheets();
       persistState();
       refreshBadges();
@@ -7675,9 +7698,12 @@ function resetLibraryCollection() {
     state.songs = [];
     bumpSongsRev();
     persistState();
+    if (window.indexedDB) { folderDbClear("deviceTracks").catch(() => {}); folderDbClear("tracks").catch(() => {}); }
+    folderState.tracks.clear(); folderState.rev++;
+    state.currentIndex = -1; state.isPlaying = false;
     refreshBadges();
     renderLibraryTab();
-    loadTrack(0, false);
+    hydrateIdlePlayerFromLibrary();
     dismissAllSheets();
     displayToast("Library cleared");
   }

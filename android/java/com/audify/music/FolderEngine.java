@@ -2,6 +2,7 @@ package com.audify.music;
 
 import android.app.Activity;
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
@@ -51,8 +52,8 @@ public class FolderEngine extends SQLiteOpenHelper {
 
     /** Lightweight MediaStore row for the fast path (no file opens). */
     private static class MsMeta {
-        String title, artist, album, mime;
-        long albumId, durationMs;
+        String title, artist, album, mime, data;
+        long id, albumId, durationMs;
         int year;
     }
 
@@ -200,6 +201,7 @@ public class FolderEngine extends SQLiteOpenHelper {
         Uri tree = Uri.parse(treeUri);
         String rootName = tree.getLastPathSegment() != null ? tree.getLastPathSegment() : "Root";
         SQLiteDatabase db = getWritableDatabase();
+        final long startMs = System.currentTimeMillis();
 
         // FAST PATH: one MediaStore query gives us tags/duration/albums for every
         // indexed file — no per-file MediaMetadataRetriever open (that was the
@@ -210,6 +212,16 @@ public class FolderEngine extends SQLiteOpenHelper {
             msPrefix = docIdToFsPath(treeDoc);
         } catch (Exception ignored) {}
         java.util.Map<String, MsMeta> msIndex = loadMediaStoreIndex(msPrefix);
+
+        // Ultra-fast full scan for normal device folders: when the SAF tree maps
+        // to a filesystem prefix and MediaStore already knows the audio, do not
+        // recursively query every document and open retrievers. Build the folder
+        // catalog from the single MediaStore query instead. This is the 10k+
+        // library path.
+        if (full && msPrefix != null && msIndex != null && !msIndex.isEmpty()) {
+            scanSyncFromMediaStore(treeUri, tree, rootName, msPrefix, msIndex, db, ignoreShortMs, startMs);
+            return;
+        }
 
         // Known file index (uri -> "mtime|size")
         final java.util.Map<String, String> known = new java.util.HashMap<>();
@@ -229,8 +241,6 @@ public class FolderEngine extends SQLiteOpenHelper {
         final int[] stats = new int[]{0, 0, 0, 0};          // scanned, added, updated
         final long[] durAcc = new long[]{0};
         final JSONArray batch = new JSONArray();
-        final long startMs = System.currentTimeMillis();
-
         lastEmitMs = System.currentTimeMillis();
         walk(tree, tree, "", known, seen, current, artThisRun, stats, durAcc, batch, ignoreShortMs, msIndex, msPrefix);
 
@@ -430,6 +440,7 @@ public class FolderEngine extends SQLiteOpenHelper {
         java.util.Map<String, MsMeta> map = new java.util.HashMap<>();
         try {
             String[] projection = {
+                    MediaStore.Audio.Media._ID,
                     MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
                     MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID,
                     MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.YEAR,
@@ -447,14 +458,16 @@ public class FolderEngine extends SQLiteOpenHelper {
             try {
                 while (c.moveToNext()) {
                     MsMeta m = new MsMeta();
-                    m.title = c.getString(0);
-                    m.artist = c.getString(1);
-                    m.album = c.getString(2);
-                    m.albumId = c.getLong(3);
-                    m.durationMs = c.getLong(4);
-                    m.year = c.getInt(5);
-                    m.mime = c.getString(6);
-                    String data = c.getString(7);
+                    m.id = c.getLong(0);
+                    m.title = c.getString(1);
+                    m.artist = c.getString(2);
+                    m.album = c.getString(3);
+                    m.albumId = c.getLong(4);
+                    m.durationMs = c.getLong(5);
+                    m.year = c.getInt(6);
+                    m.mime = c.getString(7);
+                    String data = c.getString(8);
+                    m.data = data;
                     if (data == null || data.isEmpty()) continue;
                     map.put(data.toLowerCase(), m);
                 }
@@ -465,6 +478,94 @@ public class FolderEngine extends SQLiteOpenHelper {
             Log.w(TAG, "MediaStore index unavailable, falling back to retriever: " + e);
         }
         return map;
+    }
+
+    private void scanSyncFromMediaStore(String treeUri, Uri tree, String rootName, String msPrefix,
+                                        java.util.Map<String, MsMeta> msIndex, SQLiteDatabase db,
+                                        long ignoreShortMs, long startMs) throws Exception {
+        final JSONArray batch = new JSONArray();
+        final java.util.Map<String, String> current = new java.util.HashMap<>();
+        int scanned = 0, added = 0;
+
+        db.beginTransaction();
+        try {
+            db.delete("files", "root_uri=?", new String[]{treeUri});
+            for (MsMeta m : msIndex.values()) {
+                if (m == null || m.data == null || m.durationMs <= 0) continue;
+                if (ignoreShortMs > 0 && m.durationMs < ignoreShortMs) continue;
+                JSONObject song = buildSongFastFromStore(tree, rootName, msPrefix, m);
+                if (song == null) continue;
+                String uri = song.optString("url", "");
+                if (uri.isEmpty()) continue;
+                long size = 0L, mtime = 0L;
+                try { File f = new File(m.data); if (f.exists()) { size = f.length(); mtime = f.lastModified(); } } catch (Exception ignored) {}
+                ContentValues cv = new ContentValues();
+                cv.put("uri", uri); cv.put("root_uri", treeUri); cv.put("mtime", mtime); cv.put("size", size);
+                db.insertWithOnConflict("files", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+                current.put(uri, mtime + "|" + size);
+                batch.put(song); scanned++; added++;
+                if (batch.length() >= 500) {
+                    emitFastBatch(treeUri, batch, scanned, added, 0, rootName);
+                }
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+
+        ContentValues rootCv = new ContentValues();
+        rootCv.put("last_scan", System.currentTimeMillis());
+        db.update("roots", rootCv, "uri=?", new String[]{treeUri});
+
+        JSONObject done = new JSONObject();
+        try {
+            done.put("phase", "done"); done.put("rootUri", treeUri); done.put("rootName", rootName);
+            done.put("scanned", scanned); done.put("added", added); done.put("updated", 0);
+            done.put("removedCount", 0); done.put("removedUris", new JSONArray());
+            done.put("elapsedMs", System.currentTimeMillis() - startMs);
+            if (batch.length() > 0) done.put("batch", batch);
+        } catch (Exception ignored) {}
+        emitProgress(treeUri, done);
+    }
+
+    private void emitFastBatch(String treeUri, JSONArray batch, int scanned, int added, int updated, String relPath) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("phase", "walking"); o.put("rootUri", treeUri); o.put("scanned", scanned);
+            o.put("added", added); o.put("updated", updated); o.put("currentPath", relPath); o.put("batch", batch);
+        } catch (Exception ignored) {}
+        emitProgress(treeUri, o);
+        while (batch.length() > 0) batch.remove(0);
+    }
+
+    private JSONObject buildSongFastFromStore(Uri tree, String rootName, String msPrefix, MsMeta m) {
+        try {
+            Uri contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, m.id);
+            String rel = "";
+            String name = "Audio";
+            if (m.data != null) {
+                if (m.data.startsWith(msPrefix)) {
+                    rel = m.data.substring(msPrefix.length());
+                    if (rel.startsWith("/")) rel = rel.substring(1);
+                }
+                int slash = rel.lastIndexOf('/');
+                name = slash >= 0 ? rel.substring(slash + 1) : (rel.isEmpty() ? new File(m.data).getName() : rel);
+                rel = slash >= 0 ? rel.substring(0, slash) : "";
+            }
+            JSONObject song = new JSONObject();
+            song.put("title", m.title != null ? m.title : stripExt(name));
+            song.put("artist", (m.artist != null && !m.artist.equals("<unknown>")) ? m.artist : "Unknown Artist");
+            song.put("album", (m.album != null && !m.album.isEmpty()) ? m.album : (rootName != null ? rootName : "Folder Audio"));
+            song.put("albumArtist", ""); song.put("genre", "Folder Audio");
+            song.put("year", m.year > 0 && m.year < 3000 ? m.year : 0);
+            song.put("duration", m.durationMs / 1000); song.put("mimeType", m.mime != null ? m.mime : "audio/mpeg");
+            song.put("size", 0); song.put("mtime", 0);
+            song.put("url", contentUri.toString()); song.put("path", contentUri.toString()); song.put("filePath", m.data != null ? m.data : "");
+            song.put("rootUri", tree.toString()); song.put("folderPath", rel); song.put("source", "folder"); song.put("docName", name);
+            song.put("favorite", 0); song.put("play_count", 0); song.put("lyrics", ""); song.put("imported", true);
+            song.put("artwork", m.albumId > 0 ? ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), m.albumId).toString() : "");
+            return song;
+        } catch (Exception e) { return null; }
     }
 
     /** Build a song from MediaStore metadata — zero file opens (except album art). */

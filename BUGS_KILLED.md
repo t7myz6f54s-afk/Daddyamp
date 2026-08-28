@@ -95,3 +95,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Performance: Android playback polling remains lighter, with duration calls throttled.
 - Volume sync: added native STREAM_MUSIC volume observer and JS bridge. Hardware volume buttons now update the DaddyAmp volume slider/icon. The in-app slider now controls the same Android media volume instead of a disconnected per-player value.
 - Rebuilt signed APK as versionCode 17 / versionName 1.16.
+
+## v1.17 — 10k library persistence + real folder fast scan
+
+- Fixed large scanned libraries disappearing after restart: device scan results now persist in IndexedDB (`deviceTracks`) instead of overflowing localStorage. localStorage now stores only small manual imports/settings.
+- Fixed folder scans saying complete but not appearing reliably: folder tracks are persisted through a cleared/rebuilt IndexedDB store at scan completion, and loaded back into the library on boot.
+- Added a MediaStore-only fast path for full folder scans when the SAF folder maps to device storage. 10k+ indexed songs are now built from one MediaStore query in large batches instead of centuries of SAF walking/retriever opens.
+- Fixed virtualized library only showing the first handful/chunk on some WebViews: rows now mount before observer registration, initial chunk is larger, and a scroll fallback always pumps more rows.
+- Fixed false playing animation on app open: rows only show the playing/equalizer animation when audio is actually playing, not just because currentIndex points at a remembered song.
+- Reset now clears the large IndexedDB catalogs too.
+- Rebuilt signed APK as versionCode 18 / versionName 1.17.
