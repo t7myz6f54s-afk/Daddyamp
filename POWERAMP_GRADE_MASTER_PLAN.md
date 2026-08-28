@@ -264,3 +264,7 @@ Added a non-regression rule in code and behavior: smoothness work must preserve 
 - Made performance-profile switching reapply artwork ambience and redraw the scrubber immediately.
 - Made the Dynamic Artwork Palette toggle active immediately, not just persisted for later.
 - Escaped row/queue metadata as another interface-glitch hardening pass.
+
+## v1.36 visual recovery release
+
+Added a one-time recovery for anyone who installed the over-optimized builds: DaddyAmp will restore Wave seekbar, Dynamic Artwork Palette, and Auto performance profile automatically. This protects the app's visual identity while keeping all invisible lag reductions.

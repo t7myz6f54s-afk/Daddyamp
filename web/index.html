@@ -4164,6 +4164,7 @@ let state = {
     autoQueue: true,
     replayLeveling: true,
     performanceMode: "auto",
+    visualRecoveryVersion: 0,
     listTapOpenPlayer: false,
     listDensity: "comfort",
     tempo: 1.0,
@@ -4407,6 +4408,7 @@ function loadPersistedData() {
     const settings = localStorage.getItem("daddyamp_user_settings");
     if (settings) {
       state.settings = { ...state.settings, ...JSON.parse(settings) };
+      recoverSignatureVisualDefaults();
       applyPersistedSettings();
     }
     const markers = localStorage.getItem("daddyamp_markers");
@@ -4437,6 +4439,17 @@ function persistState() {
     localStorage.setItem("daddyamp_playlists", JSON.stringify(state.playlists));
     localStorage.setItem("daddyamp_listening_history", JSON.stringify(state.listenHistory.slice(0, 400)));
   } catch (e) {}
+}
+
+function recoverSignatureVisualDefaults() {
+  // v1.32-v1.33 over-optimized and made the app look stripped on some installs.
+  // On upgrade, restore DaddyAmp's signature visuals once: wavebar + adaptive album colour.
+  const seen = Number(state.settings.visualRecoveryVersion || 0);
+  if (seen >= 136) return;
+  state.settings.seekStyle = "wave";
+  state.settings.dynamicTheme = true;
+  if (state.settings.performanceMode === "speed") state.settings.performanceMode = "auto";
+  state.settings.visualRecoveryVersion = 136;
 }
 
 function applyPersistedSettings() {
@@ -5584,7 +5597,7 @@ function rgbToHex(r, g, b) {
 }
 
 function applyPaletteNew(accent, accent2, scrimTint) {
-  const soft = accent + "20", ambient = accent + "15";
+  const soft = accent + "26", ambient = accent + "24";
   state.palette.accent = accent;
   state.palette.soft = soft;
   state.palette.ambient = ambient;
@@ -5677,7 +5690,7 @@ function extractCoverPalette(song) {
           const h2 = (hsl[0] + 30) % 360;
           accent2 = hslToHex(h2, Math.max(8, Math.round(hsl[1] * 0.5)), Math.round(Math.min(52, hsl[2] * 0.72)));
         } catch (e) { accent2 = accent; }
-        scrimTint = "rgba(" + Math.floor(r * 0.42) + ", " + Math.floor(g * 0.42) + ", " + Math.floor(b * 0.42) + ", 0.55)";
+        scrimTint = "rgba(" + Math.floor(r * 0.50) + ", " + Math.floor(g * 0.50) + ", " + Math.floor(b * 0.50) + ", 0.68)";
       }
       paletteCache[song.id] = { accent, accent2, scrimTint };
       applyPaletteNew(accent, accent2, scrimTint);

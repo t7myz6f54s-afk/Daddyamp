@@ -305,3 +305,12 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Tightened metadata rendering in song rows and queue rows: titles, artists, albums, artwork URLs, and queue text are escaped to prevent broken layout from special characters.
 - Revalidated a 10,000-track library: Auto performance stays on, explicit Speed is off, seek style remains Wave, adaptive artwork URL is applied, dynamic palette toggle works both ways, row metadata is escaped, 64 initial rows mount, and no JS errors appear.
 - Rebuilt signed APK as versionCode 36 / versionName 1.35.
+
+## v1.36 — upgrade recovery for waveform + stronger album-colour atmosphere
+
+- Added an upgrade recovery pass for installs affected by the stripped visual builds: it restores Wave seek style, turns Dynamic Artwork Palette back on, and moves accidental Speed profile back to Auto once.
+- Kept the manual controls afterwards; users can still choose Line, turn palette off, or choose Speed again deliberately.
+- Made the waveform cheaper by keeping cached peaks and verified it draws in Auto performance mode.
+- Strengthened the album-art colour wash so the player feels more “in your face” again: stronger accent ambient and stronger per-cover scrim tint.
+- Revalidated old bad settings (`line`, dynamic palette off, Speed) upgrading into the new build: settings recovered to Wave + adaptive palette + Auto, waveform path rendered, artwork ambience applied, no JS errors.
+- Rebuilt signed APK as versionCode 37 / versionName 1.36.
