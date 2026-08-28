@@ -3763,7 +3763,7 @@ html.mini-has-context .mini-context-chip { display: inline; }
               <div style="font-size: 11px; color: var(--text-tertiary);">Adapt interface accent to current cover</div>
             </div>
             <label class="toggle-switch-unit">
-              <input type="checkbox" id="toggle-dynamic-theme" checked onchange="saveAppOption('dynamicTheme', this.checked)">
+              <input type="checkbox" id="toggle-dynamic-theme" checked onchange="setDynamicArtworkPalette(this.checked)">
               <span class="toggle-slider-bar"></span>
             </label>
           </div>
@@ -4505,14 +4505,20 @@ function setupCanvas() {
   drawPowerampScrubber(true);
 }
 
+let _peaksCache = { key: "", count: 0, peaks: [] };
 function getTrackPeaks(song, count) {
-  // Deterministic acoustic signature hash based on duration, title and id
+  const key = `${currentSongUri(song) || song.id || "idle"}::${song.duration || 0}`;
+  if (_peaksCache.key === key && _peaksCache.count === count && _peaksCache.peaks.length === count) return _peaksCache.peaks;
+  // Deterministic acoustic signature hash based on duration, title and id. Cached so
+  // the loved waveform stays cheap enough to keep in Auto performance mode.
   const peaks = [];
-  const seed = (song.id || 100) * 17 + (song.duration || 30);
+  const rawSeed = String(song.id || song.path || song.title || 100).split("").reduce((a, ch) => ((a * 31) + ch.charCodeAt(0)) >>> 0, 0);
+  const seed = rawSeed + (song.duration || 30);
   for (let i = 0; i < count; i++) {
     const v = 0.35 + 0.55 * Math.abs(Math.sin((seed + i * 0.43) * 1.618) * Math.cos(i * 0.28));
     peaks.push(Math.round(v * 100) / 100);
   }
+  _peaksCache = { key, count, peaks };
   return peaks;
 }
 
@@ -5487,6 +5493,12 @@ function setPerformanceMode(mode) {
   applyPerformanceClass();
   renderPerformancePills();
   setupCanvas();
+  const song = state.songs[state.currentIndex];
+  if (song) {
+    setAmbientArt(song.artwork || "artwork/default.png", true);
+    if (state.settings.dynamicTheme && !isSpeedMode()) afterNextPaint(() => extractCoverPalette(song), 20);
+  }
+  drawPowerampScrubber(true);
   displayToast(`Performance: ${state.settings.performanceMode}`);
 }
 function renderPerformancePills() {
@@ -5593,6 +5605,26 @@ function currentFallbackAccent() {
 
 function applyDefaultAccent() {
   applyPaletteNew(currentFallbackAccent(), currentFallbackAccent(), "rgba(0, 0, 0, 0)");
+}
+
+function setDynamicArtworkPalette(enabled) {
+  state.settings.dynamicTheme = !!enabled;
+  persistState();
+  const cb = document.getElementById("toggle-dynamic-theme");
+  if (cb) cb.checked = !!enabled;
+  const song = state.songs[state.currentIndex];
+  if (enabled && song && !isSpeedMode()) {
+    setAmbientArt(song.artwork || "artwork/default.png", true);
+    extractCoverPalette(song);
+    displayToast("Adaptive album colours on");
+  } else if (!enabled) {
+    if (state.settings.accentColor) applyPaletteNew(state.settings.accentColor, state.settings.accentColor, "rgba(0, 0, 0, 0)");
+    else applyDefaultAccent();
+    displayToast("Adaptive album colours off");
+  } else if (isSpeedMode()) {
+    displayToast("Speed mode keeps album colours light");
+  }
+  drawPowerampScrubber(true);
 }
 
 function extractCoverPalette(song) {

@@ -256,3 +256,11 @@ Fixes:
 - Escaped row and queue HTML to reduce visible interface glitches from special characters in song metadata.
 
 Direction going forward: optimization must not delete beloved identity features. Smoothness work should remove invisible work first: sorting, hidden rendering, repeated scans, excessive DOM, and storage writes.
+
+## v1.35 visual-protection pass
+
+Added a non-regression rule in code and behavior: smoothness work must preserve the waveform and adaptive album-colour atmosphere unless the user explicitly chooses Speed/Line/off.
+- Cached waveform peaks so the wavebar remains visually rich without repeated per-frame recomputation.
+- Made performance-profile switching reapply artwork ambience and redraw the scrubber immediately.
+- Made the Dynamic Artwork Palette toggle active immediately, not just persisted for later.
+- Escaped row/queue metadata as another interface-glitch hardening pass.

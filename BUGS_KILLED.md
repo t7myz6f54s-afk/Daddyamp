@@ -295,3 +295,13 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Fixed row-heart actions to use the row dataset instead of injecting raw ids into inline JavaScript.
 - Revalidated a 10,000-track library: waveform setting remains `wave`, adaptive art URL is applied, Auto performance stays on for smooth lists, explicit speed mode stays off, row text is escaped, and 64 initial rows mount with no JS errors.
 - Rebuilt signed APK as versionCode 35 / versionName 1.34.
+
+## v1.35 — signature visuals protection + metadata glitch hardening
+
+- Added a guardrail so future smoothness work does not silently remove the signature waveform or album-colour experience again.
+- The Poweramp-style waveform is now cached per track/count, keeping it cheap enough to remain enabled in Auto performance mode.
+- Performance Profile changes now immediately restore the current track's artwork atmosphere and redraw the waveform when switching back from Speed to Auto/Rich.
+- Added a proper Dynamic Artwork Palette handler: toggling it now immediately applies the current album colours or manual accent instead of only changing a saved flag.
+- Tightened metadata rendering in song rows and queue rows: titles, artists, albums, artwork URLs, and queue text are escaped to prevent broken layout from special characters.
+- Revalidated a 10,000-track library: Auto performance stays on, explicit Speed is off, seek style remains Wave, adaptive artwork URL is applied, dynamic palette toggle works both ways, row metadata is escaped, 64 initial rows mount, and no JS errors appear.
+- Rebuilt signed APK as versionCode 36 / versionName 1.35.
