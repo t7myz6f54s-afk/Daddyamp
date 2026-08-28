@@ -2706,10 +2706,10 @@ html.perf-mode .sheet-content-dialog {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
-html.perf-mode #docked-mini-player::before,
-html.perf-mode .player-ambient-glow,
-html.perf-mode .app-ambient-wall,
-html.perf-mode .player-ambient-wall {
+html.speed-mode #docked-mini-player::before,
+html.speed-mode .player-ambient-glow,
+html.speed-mode .app-ambient-wall,
+html.speed-mode .player-ambient-wall {
   display: none !important;
 }
 html.perf-mode .portal-category-card,
@@ -4546,7 +4546,7 @@ function drawPowerampScrubber(forceRedraw = false) {
   const centerY = height / 2.0;
 
   // Seek style: 'line' mode renders a clean rounded seekbar and returns
-  if (state.settings.seekStyle === "line" || isPerformanceMode()) {
+  if (state.settings.seekStyle === "line") {
     const trackY = centerY;
     const trackH = 4;
     ctx.fillStyle = "rgba(255,255,255,0.14)";
@@ -4789,7 +4789,7 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   document.getElementById("player-song-artist").textContent = `${song.artist} • ${song.album}`;
   
   const artImg = document.getElementById("player-artwork-img");
-  if (isPerformanceMode()) {
+  if (isSpeedMode()) {
     artImg.style.opacity = "1";
     artImg.src = song.artwork || "artwork/default.png";
   } else {
@@ -4841,8 +4841,8 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   state.currentTime = 0;
   state.crossfadeTriggered = false;
   state.pendingSeekMs = (preSeekMs != null) ? preSeekMs : (song.cueOf ? (song.cueOf.start * 1000) : null);
-  if (isPerformanceMode()) {
-    setAmbientArt("artwork/default.png", true);
+  if (isSpeedMode()) {
+    setAmbientArt(song.artwork || "artwork/default.png", true);
   } else {
     setAmbientArt(song.artwork || "artwork/default.png");
     retriggerAnim(document.getElementById("player-artwork-img"), "art-enter");
@@ -4863,7 +4863,7 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   afterNextPaint(() => {
     if (gen !== state.playGen) return;
     if (state.settings.dynamicTheme) extractCoverPalette(song);
-    if (!song.lyrics && state.settings.lrclibFetch && !isPerformanceMode()) queryLrclib(song);
+    if (!song.lyrics && state.settings.lrclibFetch && !isSpeedMode()) queryLrclib(song);
     updateMediaSession(song);
   }, isPerformanceMode() ? 120 : 20);
 
@@ -5465,6 +5465,9 @@ function applyAudioVolume() {
 function afterNextPaint(fn, delay = 0) {
   requestAnimationFrame(() => setTimeout(() => { try { fn(); } catch (e) {} }, delay));
 }
+function isSpeedMode() {
+  return (state.settings.performanceMode || "auto") === "speed";
+}
 function isPerformanceMode() {
   const mode = state.settings.performanceMode || "auto";
   if (mode === "rich") return false;
@@ -5474,6 +5477,7 @@ function isPerformanceMode() {
 function applyPerformanceClass() {
   const perf = isPerformanceMode();
   document.documentElement.classList.toggle("perf-mode", perf);
+  document.documentElement.classList.toggle("speed-mode", isSpeedMode());
   document.documentElement.classList.toggle("large-library", _badges.tracks > 1200);
   return perf;
 }
@@ -5592,7 +5596,12 @@ function applyDefaultAccent() {
 }
 
 function extractCoverPalette(song) {
-  if (isPerformanceMode()) { applyDefaultAccent(); return; }
+  if (isSpeedMode()) {
+    // Explicit Speed mode keeps scrolling ultra-light, but Auto/Rich keep the
+    // loved album-art adaptive colour wash.
+    applyDefaultAccent();
+    return;
+  }
   if (!song || !song.artwork) { applyDefaultAccent(); return; }
   if (paletteCache[song.id]) {
     const c = paletteCache[song.id];
@@ -6141,10 +6150,10 @@ function renderInPlayerQueue() {
     const curRow = document.createElement("div");
     curRow.className = "queue-stage-row now-active";
     curRow.innerHTML = `
-      <img src="${cur.artwork || 'artwork/default.png'}" class="queue-stage-art">
+      <img src="${escAttr(cur.artwork || 'artwork/default.png')}" class="queue-stage-art">
       <div class="queue-stage-info">
-        <div class="queue-stage-title">${cur.title}</div>
-        <div class="queue-stage-artist">${cur.artist} • NOW PLAYING</div>
+        <div class="queue-stage-title">${escHtml(cur.title || "Unknown Track")}</div>
+        <div class="queue-stage-artist">${escHtml(cur.artist || "Unknown Artist")} • NOW PLAYING</div>
       </div>
       <span class="tech-format-badge" style="background: var(--accent-soft); color: var(--accent);">ACTIVE</span>
     `;
@@ -6165,10 +6174,10 @@ function renderInPlayerQueue() {
     const row = document.createElement("div");
     row.className = "queue-stage-row";
     row.innerHTML = `
-      <img src="${item.artwork || 'artwork/default.png'}" class="queue-stage-art">
+      <img src="${escAttr(item.artwork || 'artwork/default.png')}" class="queue-stage-art">
       <div class="queue-stage-info">
-        <div class="queue-stage-title">${item.title}</div>
-        <div class="queue-stage-artist">${item.artist}</div>
+        <div class="queue-stage-title">${escHtml(item.title || "Unknown Track")}</div>
+        <div class="queue-stage-artist">${escHtml(item.artist || "Unknown Artist")}</div>
       </div>
       <div style="display: flex; gap: 4px; align-items: center;" onclick="event.stopPropagation()">
         <button class="btn-action-tap" style="width: 28px; height: 28px;" onclick="moveQueueItemUp(${idx})" title="Move Up">
@@ -8998,7 +9007,7 @@ function songRowLeadHtml(s, rowIndex) {
   const formatLabel = s.virtual ? "CUE" : ((ext === "WAV" || ext === "FLAC" || ext === "MP3" || ext === "M4A") ? ext : "AUDIO");
   return `
     <div class="row-artwork-frame">
-      <img src="${s.artwork || 'artwork/default.png'}" class="row-artwork-img" alt="${s.title}" loading="lazy" decoding="async">
+      <img src="${escAttr(s.artwork || 'artwork/default.png')}" class="row-artwork-img" alt="${escAttr(s.title || 'Track')}" loading="lazy" decoding="async">
       <div class="row-live-eq-badge">
         <div class="eq-live-bar"></div>
         <div class="eq-live-bar"></div>
@@ -9006,12 +9015,12 @@ function songRowLeadHtml(s, rowIndex) {
       </div>
     </div>
     <div class="row-meta-content">
-      <div class="row-title-line">${s.title}</div>
+      <div class="row-title-line">${escHtml(s.title || "Unknown Track")}</div>
       <div class="row-details-line">
         <span class="tech-format-badge">${formatLabel}</span>
-        <span>${s.artist}</span>
+        <span>${escHtml(s.artist || "Unknown Artist")}</span>
         <span>•</span>
-        <span>${s.album}</span>
+        <span>${escHtml(s.album || "Unknown Album")}</span>
         ${(s.play_count || 0) >= 3 ? `<span class="plays-count-chip"><svg class="icon icon-xs" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>${s.play_count} plays</span>` : ""}
       </div>
     </div>`;
@@ -9021,7 +9030,7 @@ function songRowTrailingHtml(s) {
   return `
     <div class="row-trailing-group">
       <span class="row-duration-digits">${formatDuration(s.duration)}</span>
-      <button class="btn-inline-heart ${s.favorite ? 'liked' : ''}" onclick="event.stopPropagation(); toggleRowFavorite(${s.id})">
+      <button class="btn-inline-heart ${s.favorite ? 'liked' : ''}" onclick="event.stopPropagation(); toggleRowFavorite(this.closest('.song-catalog-row').dataset.songId)">
         <svg class="icon icon-md" viewBox="0 0 24 24">${s.favorite ? '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/>' : '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>'}</svg>
       </button>
       <button class="btn-action-tap" onclick="event.stopPropagation(); triggerTrackMenuById(this.closest('.song-catalog-row').dataset.songId)">
@@ -9041,7 +9050,7 @@ function buildSongRow(s, rowIndex) {
   if (!isPerformanceMode()) row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
 
   row.innerHTML = (opts && opts.leadHtml ? opts.leadHtml(s, rowIndex) : songRowLeadHtml(s, rowIndex))
-    + (opts && opts.noAlbumLine ? `<div class="row-meta-content"><div class="row-title-line">${s.title}</div><div class="row-details-line"><span>${s.artist}</span></div></div>` : "")
+    + (opts && opts.noAlbumLine ? `<div class="row-meta-content"><div class="row-title-line">${escHtml(s.title || "Unknown Track")}</div><div class="row-details-line"><span>${s.artist}</span></div></div>` : "")
     + songRowTrailingHtml(s);
 
   row.onclick = () => {
@@ -9680,10 +9689,10 @@ function renderQueueList() {
     const row = document.createElement("div");
     row.className = "song-catalog-row";
     row.innerHTML = `
-      <img src="${item.artwork || 'artwork/default.png'}" style="width: 36px; height: 36px; border-radius: 4px; object-fit: cover;">
+      <img src="${escAttr(item.artwork || 'artwork/default.png')}" style="width: 36px; height: 36px; border-radius: 4px; object-fit: cover;">
       <div class="row-meta-content">
-        <div class="row-title-line">${item.title}</div>
-        <div class="row-details-line">${item.artist}</div>
+        <div class="row-title-line">${escHtml(item.title || "Unknown Track")}</div>
+        <div class="row-details-line">${escHtml(item.artist || "Unknown Artist")}</div>
       </div>
       <div style="display: flex; gap: 4px; align-items: center;" onclick="event.stopPropagation()">
         <button class="btn-action-tap" style="width: 28px; height: 28px;" onclick="moveQueueItemUp(${idx})" title="Move Up">

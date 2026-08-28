@@ -243,3 +243,16 @@ Implemented another Poweramp-like responsiveness pass focused on removing invisi
 - Performance-mode CSS now adds containment and removes remaining image shadow cost.
 
 This keeps the core Poweramp-inspired behavior while making the UI do less work on every tap, swipe, track load, and tab change.
+
+## v1.34 correction — keep the beautiful parts while staying smooth
+
+User feedback: the performance pass made the app feel stripped because the waveform seekbar and adaptive album-art colour wash were effectively removed in large libraries.
+
+Fixes:
+- Auto performance mode now targets list/index/queue work, not the signature player visuals.
+- Waveform seekbar is restored unless the user explicitly selects the Line seek style.
+- Album-art adaptive colour extraction is restored in Auto/Rich mode.
+- Explicit Speed mode remains for weak devices and is the only mode that removes palette/ambient effects.
+- Escaped row and queue HTML to reduce visible interface glitches from special characters in song metadata.
+
+Direction going forward: optimization must not delete beloved identity features. Smoothness work should remove invisible work first: sorting, hidden rendering, repeated scans, excessive DOM, and storage writes.

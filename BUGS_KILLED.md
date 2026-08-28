@@ -284,3 +284,14 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Added more containment and lighter image styling for Performance mode to improve scroll/touch smoothness in Android WebView.
 - 10k-track JSDOM smoke: no JS errors, Performance mode on, Pop genre inference intact, album tab ~15 ms, giant album detail ~66 ms, giant play-album path ~136 ms with hidden queue rendering skipped, session queue capped to 300 paths.
 - Rebuilt signed APK as versionCode 34 / versionName 1.33.
+
+## v1.34 — restore waveform/adaptive colour + glitch cleanup
+
+- Restored the Poweramp-style waveform seekbar in Auto/large-library mode. Performance mode still keeps list rendering lean, but it no longer silently downgrades the loved wavebar to a plain line.
+- Restored the adaptive album-art colour atmosphere in Auto/large-library mode. Album colours now drive the player/app wash again after track changes.
+- Kept explicit Speed mode available for worst-case devices, but made it the only mode that hard-disables palette extraction and ambient wall effects.
+- Added a separate `speed-mode` CSS class so list performance optimizations no longer remove the app's signature visuals by accident.
+- Fixed interface glitches caused by raw track text/IDs in row HTML: track titles, artists, albums, artwork paths, and queue rows are escaped before insertion.
+- Fixed row-heart actions to use the row dataset instead of injecting raw ids into inline JavaScript.
+- Revalidated a 10,000-track library: waveform setting remains `wave`, adaptive art URL is applied, Auto performance stays on for smooth lists, explicit speed mode stays off, row text is escaped, and 64 initial rows mount with no JS errors.
+- Rebuilt signed APK as versionCode 35 / versionName 1.34.
