@@ -35,6 +35,7 @@ public class MainActivity extends Activity {
         window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         window.setStatusBarColor(Color.parseColor("#08090D"));
+        window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             window.setNavigationBarColor(Color.parseColor("#08090D"));
         }
@@ -76,7 +77,7 @@ public class MainActivity extends Activity {
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
         webView.setHorizontalScrollBarEnabled(false);
-        webView.setBackgroundColor(Color.parseColor("#08090D"));
+        webView.setBackgroundColor(Color.TRANSPARENT);
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override

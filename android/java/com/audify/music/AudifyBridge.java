@@ -10,6 +10,8 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.database.Cursor;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioAttributes;
@@ -215,6 +217,28 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
         if (!force && pct == lastVolumePercent) return;
         lastVolumePercent = pct;
         runOnJs("if (window.onSystemVolumeChanged) { window.onSystemVolumeChanged(" + pct + "); }");
+    }
+
+
+    @JavascriptInterface
+    public void setWindowTransparency(final boolean enabled, final float dim) {
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    int bg = enabled ? Color.TRANSPARENT : Color.parseColor("#08090D");
+                    activity.getWindow().setBackgroundDrawable(new ColorDrawable(bg));
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                        int sys = enabled ? Color.TRANSPARENT : Color.parseColor("#08090D");
+                        activity.getWindow().setStatusBarColor(sys);
+                        activity.getWindow().setNavigationBarColor(sys);
+                    }
+                    webView.setBackgroundColor(Color.TRANSPARENT);
+                } catch (Exception e) {
+                    Log.w(TAG, "setWindowTransparency failed", e);
+                }
+            }
+        });
     }
 
     @JavascriptInterface

@@ -3204,6 +3204,42 @@ html.mini-has-context .mini-context-chip { display: inline; }
   .player-ambient-layer, .row-artwork-frame::before, .mini-cover-shell::before, .album-thumb-container::before, .drilldown-art-box::before { animation: none !important; }
 }
 
+
+
+/* v1.40 Performance-first main library: one simple song list */
+#library-subnav-bar, .catalog-filter-strip, .quick-shuffle-strip, .catalog-stats-banner { display: none !important; }
+#library-scroll-container { padding-top: 0 !important; }
+.simple-virtual-list { border-top: none; position: relative; contain: strict; }
+.simple-virtual-spacer { width: 1px; flex: 0 0 auto; }
+.song-catalog-row.song-row-simple {
+  min-height: 58px;
+  padding: 11px 18px;
+  gap: 0;
+  contain: layout paint style;
+  background: transparent;
+}
+.song-row-simple .row-meta-content { gap: 4px; }
+.song-row-simple .row-title-line { font-size: 15px; font-weight: 650; letter-spacing: 0.01em; }
+.song-row-simple .row-details-line { display: block; font-size: 12.5px; color: var(--text-secondary); }
+.song-row-simple.playing-now { border-left: 2px solid var(--accent); background: rgba(126, 200, 227, 0.10); }
+html.transparent-bg, html.transparent-bg body { background: transparent !important; }
+html.transparent-bg #daddyamp-root { background: transparent !important; }
+html.transparent-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,var(--wallpaper-dim,0.74));
+  pointer-events: none;
+  z-index: 0;
+}
+html.transparent-bg #ambient-layer { opacity: 0.18; }
+html.transparent-bg #library-scroll-container { background: transparent !important; }
+html.transparent-bg #docked-bottom-nav,
+html.transparent-bg #docked-mini-player {
+  background: rgba(5,7,10,0.72) !important;
+}
+html.transparent-bg .song-catalog-row { text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+
 </style>
 </head>
 <body>
@@ -3897,6 +3933,23 @@ html.mini-has-context .mini-context-chip { display: inline; }
               <span class="toggle-slider-bar"></span>
             </label>
           </div>
+          <div class="setting-card-item">
+            <div>
+              <div style="font-weight: 650; font-size: 13px;">Wallpaper Background</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">Make the Android window transparent behind the song list</div>
+            </div>
+            <label class="toggle-switch-unit">
+              <input type="checkbox" id="toggle-transparent-bg" onchange="setTransparentBackground(this.checked)">
+              <span class="toggle-slider-bar"></span>
+            </label>
+          </div>
+          <div class="setting-card-item" id="wallpaper-dim-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="font-weight: 650; font-size: 13px;">Wallpaper Dim</div>
+              <div style="font-size: 11px; color: var(--text-tertiary);" id="wallpaper-dim-label">74%</div>
+            </div>
+            <input type="range" min="35" max="90" value="74" id="wallpaper-dim-range" class="slider-vol-bar" oninput="setWallpaperDim(this.value)">
+          </div>
           <div style="padding: 4px 0;">
             <div style="font-size: 11.5px; font-weight: 650; margin-bottom: 8px; color: var(--text-secondary);">Manual Palette Accent:</div>
             <div style="display: flex; gap: 10px;">
@@ -4295,6 +4348,8 @@ let state = {
     replayLeveling: true,
     performanceMode: "auto",
     visualRecoveryVersion: 139,
+    transparentBackground: false,
+    wallpaperDim: 0.74,
     listTapOpenPlayer: false,
     listDensity: "comfort",
     tempo: 1.0,
@@ -4594,6 +4649,7 @@ function applyPersistedSettings() {
     applyPaletteTheme(state.settings.accentColor);
   }
   syncPlaybackSettingsUI();
+  applyWallpaperTransparency();
   applyTempo(parseFloat(state.settings.tempo) || 1.0);
   applyTheme(state.settings.theme || "abyss");
   applyBlurLevel(state.settings.blurLevel || "med");
@@ -5773,6 +5829,30 @@ function applyPaletteNew(accent, accent2, scrimTint) {
 
 function currentFallbackAccent() {
   return desatAccent(state.settings.accentColor || "#7EC8E3");
+}
+
+function applyWallpaperTransparency() {
+  const on = !!state.settings.transparentBackground;
+  const dim = Math.max(0.35, Math.min(0.90, Number(state.settings.wallpaperDim || 0.74)));
+  document.documentElement.classList.toggle("transparent-bg", on);
+  document.documentElement.style.setProperty("--wallpaper-dim", String(dim));
+  const t = document.getElementById("toggle-transparent-bg");
+  if (t) t.checked = on;
+  const r = document.getElementById("wallpaper-dim-range");
+  if (r) r.value = Math.round(dim * 100);
+  const l = document.getElementById("wallpaper-dim-label");
+  if (l) l.textContent = Math.round(dim * 100) + "%";
+  try { if (isAndroid && window.AndroidBridge.setWindowTransparency) window.AndroidBridge.setWindowTransparency(on, dim); } catch (e) {}
+}
+function setTransparentBackground(enabled) {
+  state.settings.transparentBackground = !!enabled;
+  persistState();
+  applyWallpaperTransparency();
+}
+function setWallpaperDim(value) {
+  state.settings.wallpaperDim = Math.max(0.35, Math.min(0.90, Number(value || 74) / 100));
+  persistState();
+  applyWallpaperTransparency();
 }
 
 function applyDefaultAccent() {
@@ -8019,6 +8099,7 @@ function syncFluidSettingsUI() {
   renderPerformancePills();
   renderBlurPills();
   applyReduceMotionClass();
+  applyWallpaperTransparency();
   const rm = document.getElementById("toggle-reduce-motion");
   if (rm) rm.checked = !!state.settings.reduceMotion;
 }
@@ -9194,6 +9275,7 @@ function playFolderTracks(folderPath, shuffle) {
 
 function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — import files or scan your device", targetEl = null, opts = null) {
   const target = targetEl || document.getElementById("library-render-target");
+  const mainSimple = target && target.id === "library-render-target" && !(opts && opts.richRows);
   target.innerHTML = "";
 
   if (tracks.length === 0) {
@@ -9223,6 +9305,11 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
     return;
   }
 
+  if (mainSimple) {
+    renderSimpleVirtualSongList(tracks, target);
+    return;
+  }
+
   const listEl = document.createElement("div");
   listEl.className = "song-rows-catalog";
   catalogCtx = { tracks, listEl, offset: 0, opts: opts || null };
@@ -9237,6 +9324,67 @@ function renderSongsCatalog(tracks = state.songs, emptyMsg = "No tracks yet — 
     foot.innerHTML = opts.footerHtml;
     target.appendChild(foot);
   }
+}
+
+// ---- Main library recycler: fixed-height, title+artist only, visible rows only.
+let simpleVirtualCtx = null;
+let simpleVirtualRaf = 0;
+const SIMPLE_ROW_H = 58;
+function simpleSongRow(s, rowIndex) {
+  const isPlayingThis = state.isPlaying && String(state.songs[state.currentIndex]?.id) === String(s.id) && state.songs[state.currentIndex]?.id != null;
+  const row = document.createElement("div");
+  row.className = `song-catalog-row song-row-simple ${isPlayingThis ? "playing-now" : ""}`;
+  row.dataset.songId = s.id;
+  row.dataset.path = s.path || s.url || "";
+  row.innerHTML = `<div class="row-meta-content"><div class="row-title-line">${escHtml(s.title || "Unknown Track")}</div><div class="row-details-line">${escHtml(s.artist || "Unknown Artist")}</div></div>`;
+  row.onclick = () => {
+    state.queue = [];
+    const idx = resolveSongIndex(s);
+    if (idx !== -1) {
+      loadTrack(idx, true);
+      if (state.settings.listTapOpenPlayer) expandNowPlayingScreen();
+    }
+  };
+  attachLongPressContext(row, s);
+  return row;
+}
+function renderSimpleVirtualSongList(tracks, target) {
+  const sc = document.getElementById("library-scroll-container");
+  const listEl = document.createElement("div");
+  listEl.className = "song-rows-catalog simple-virtual-list";
+  const top = document.createElement("div"); top.className = "simple-virtual-spacer";
+  const rows = document.createElement("div"); rows.className = "simple-virtual-rows";
+  const bottom = document.createElement("div"); bottom.className = "simple-virtual-spacer";
+  listEl.appendChild(top); listEl.appendChild(rows); listEl.appendChild(bottom);
+  target.appendChild(listEl);
+  simpleVirtualCtx = { tracks, target, listEl, rows, top, bottom, rowH: SIMPLE_ROW_H, start: -1, end: -1 };
+  if (sc && !sc.dataset.simpleVirtualScroll) {
+    sc.dataset.simpleVirtualScroll = "1";
+    sc.addEventListener("scroll", () => {
+      if (!simpleVirtualCtx) return;
+      if (!simpleVirtualRaf) simpleVirtualRaf = requestAnimationFrame(() => { simpleVirtualRaf = 0; updateSimpleVirtualRows(false); });
+    }, { passive: true });
+  }
+  updateSimpleVirtualRows(true);
+}
+function updateSimpleVirtualRows(force) {
+  const ctx = simpleVirtualCtx;
+  const sc = document.getElementById("library-scroll-container");
+  if (!ctx || !sc) return;
+  const total = ctx.tracks.length;
+  const viewport = sc.clientHeight || window.innerHeight || 800;
+  const scrollTop = Math.max(0, sc.scrollTop - (ctx.target.offsetTop || 0));
+  const overscan = 7;
+  const start = Math.max(0, Math.floor(scrollTop / ctx.rowH) - overscan);
+  const count = Math.ceil(viewport / ctx.rowH) + overscan * 2;
+  const end = Math.min(total, start + count);
+  if (!force && start === ctx.start && end === ctx.end) return;
+  ctx.start = start; ctx.end = end;
+  ctx.top.style.height = (start * ctx.rowH) + "px";
+  ctx.bottom.style.height = Math.max(0, (total - end) * ctx.rowH) + "px";
+  const frag = document.createDocumentFragment();
+  for (let i = start; i < end; i++) frag.appendChild(simpleSongRow(ctx.tracks[i], i));
+  ctx.rows.replaceChildren(frag);
 }
 
 // ---- Virtualized catalog: only a small first window mounts; the rest stream in on scroll.

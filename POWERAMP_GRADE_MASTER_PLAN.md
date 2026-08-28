@@ -293,3 +293,12 @@ Implemented the requested visual-only polish layer:
 - Mini-player progress is thicker, glowing, and transform-driven; mini gestures keep Poweramp-style skip/expand behavior with springier recovery.
 - Full-player atmosphere breathes, album art enters from 0.90 scale, stage tabs use a sliding morph pill, waveform gets handle glow and playhead pulse, and volume thumb styling now matches the waveform handle.
 - The pass intentionally preserves functionality and the restored signature visuals: Wave seekbar + adaptive album colours stay on by default.
+
+## v1.40 performance-first correction
+
+User feedback: previous motion polish had no visible value and made the app feel laggier. Direction changed to performance first.
+- Main Library is now a minimal title+artist Songs list only.
+- The main list is a real recycler/window, not append-only infinite rendering.
+- Main list rows do not load artwork or render extra controls/metadata.
+- Real Android window transparency is implemented through translucent theme/layout/WebView/native bridge, with a user dim setting for readability.
+- Future animation work must be minimal and verified against the actual rendered DOM/build; no claims without proof.

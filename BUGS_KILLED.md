@@ -350,3 +350,15 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Added motion-polish JS helpers for tab/pill indicators, bottom-nav active animation, thumbnail load states, and global tactile tap feedback.
 - Revalidated 10k-track visual recovery: Wave restored, Dynamic Artwork Palette restored, Auto mode restored from old bad settings, waveform draw path and handle glow executed, subnav/stage indicators mounted, metadata escaped, 64 initial rows, 0 JS errors.
 - Rebuilt signed APK as versionCode 40 / versionName 1.39.
+
+## v1.40 — performance-first library strip-down + real transparent window
+
+- Stripped the main Library screen down to a single Songs list. The Albums/Artists/Favorites/Recent/Folders/Lists/History tab strip, search/action strip, shuffle banner, and stats/codec banner are hidden from the main screen.
+- Main song rows now render only two pieces of text: title and artist. No album art, no duration, no format badge, no favorite/menu rail, and no extra metadata clutter on the main list.
+- Replaced the main song list's append-only windowing with a fixed-height recycler: only the visible row window plus overscan is mounted, and scrolling swaps the visible row range instead of accumulating thousands of DOM nodes.
+- Removed album-art loading from the main list entirely, eliminating one likely scroll jank source. Artwork remains in the mini/full player and detail surfaces.
+- Added a Wallpaper Background setting with adjustable Wallpaper Dim. When enabled, Android uses an actual translucent Activity/window + transparent WebView/background, not a fake blurred screenshot. The CSS dim overlay keeps text readable.
+- Added a native Android bridge method `setWindowTransparency(enabled, dim)` and changed the Activity theme/layout/WebView backgrounds to support true transparency.
+- Kept only minimal tactile row press feedback and the existing smooth now-playing transition; no new decorative animation work was added in this pass.
+- JSDOM performance proof with 10,000 tracks: main rows mounted 27 initially, still 27 after scrolling deep; first visible row changed from Song 0 to Song 93; main rows contained no images and no duration nodes; stripped bars computed `display:none`; transparency setting toggled `transparent-bg`, dim set to 0.55, and native bridge call was observed.
+- Rebuilt signed APK as versionCode 41 / versionName 1.40.
