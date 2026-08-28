@@ -271,3 +271,16 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Settings gained clean controls for Replay Leveling and Performance Profile without removing existing folder scan, swipe refresh, gesture, genre, queue, playlist, and player behavior.
 - 10k-track smoke after the cache fix: 64 initial rows, Performance mode on, 0 JS errors, Britney/Local Device classified as Pop, portal open 0 ms, track load dropped from multi-second sort work to ~27 ms, context update ~1 ms, native replay-gain bridge called.
 - Rebuilt signed APK as versionCode 33 / versionName 1.32.
+
+## v1.33 — fluidity sweep: queue, indexes, and first-paint lag
+
+- Removed more large-library jank from album/artist/genre tabs by avoiding per-group natural sorting for giant groups in Performance mode. Detail pages still stay identity-safe and stream rows instead of mounting everything.
+- Track tab first paint now skips unnecessary full-library title sorting for huge libraries when the default order is already stable, while user-selected sort modes still work.
+- Queue rendering is capped in both the full-player Queue stage and Queue sheet so playing a 5,000–10,000 track album/genre/folder does not create thousands of DOM rows.
+- Track changes no longer rebuild the hidden in-player queue stage. It renders only when the Queue stage is actually visible.
+- Current playing row updates now touch only the previous active row and current row instead of walking every mounted song row.
+- Session restore for queued tracks now uses a path map instead of repeated linear searches, and session queue persistence is capped to keep localStorage writes fast.
+- Folder/album/artist/genre “play all” paths avoid extra first-track queue shifts and reduce big-array copies.
+- Added more containment and lighter image styling for Performance mode to improve scroll/touch smoothness in Android WebView.
+- 10k-track JSDOM smoke: no JS errors, Performance mode on, Pop genre inference intact, album tab ~15 ms, giant album detail ~66 ms, giant play-album path ~136 ms with hidden queue rendering skipped, session queue capped to 300 paths.
+- Rebuilt signed APK as versionCode 34 / versionName 1.33.

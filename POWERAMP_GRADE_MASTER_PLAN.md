@@ -231,3 +231,15 @@ Validation added for this pass:
 - JS syntax check for the extracted inline script.
 - JSDOM large-library smoke with 10,000 tracks: Pop genre inference, 64 initial rows, Performance class enabled, portal open 0 ms, track load ~27 ms, context update ~1 ms, replay-gain bridge called, no JS errors.
 - Android APK build/sign/align verification before release.
+
+## v1.33 fluidity sweep — less work per touch
+
+Implemented another Poweramp-like responsiveness pass focused on removing invisible work:
+- Big album/artist/genre indexes no longer sort every giant group just to draw category cards in Performance mode.
+- Track list first paint avoids an unnecessary full-library default sort for huge stable libraries.
+- Queue UI is capped and lazy: large queues remain playable, but hidden queue panels do not rebuild on every track change.
+- Playing-row updates are now targeted instead of scanning every mounted row.
+- Session queue writes/restores were trimmed so long queues do not make track changes feel sticky.
+- Performance-mode CSS now adds containment and removes remaining image shadow cost.
+
+This keeps the core Poweramp-inspired behavior while making the UI do less work on every tap, swipe, track load, and tab change.

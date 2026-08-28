@@ -2727,6 +2727,19 @@ html.perf-mode .album-unit-box {
   contain-intrinsic-size: 64px;
 }
 
+html.perf-mode .song-rows-catalog,
+html.perf-mode .album-cards-grid {
+  contain: content;
+}
+html.perf-mode .row-artwork-img,
+html.perf-mode .album-thumb-image,
+html.perf-mode .queue-stage-art {
+  box-shadow: none !important;
+}
+html.perf-mode .song-catalog-row {
+  transition: background 70ms linear;
+}
+
 /* Large-library smoothness: no per-row entrance animation once catalog is huge */
 html.large-library .song-catalog-row,
 html.large-library .album-unit-box {
@@ -4311,7 +4324,12 @@ function applyCurrentSortCached(list) {
   if (_sortCache.src === list && _sortCache.key === state.sortKey && _sortCache.dir === state.sortDesc && _sortCache.rev === state.songsRev) {
     return _sortCache.list;
   }
-  const out = [...list].sort(sortComparator(state.sortKey));
+  // Track view smoothness: for huge libraries, avoid sorting thousands on first paint
+  // unless the user explicitly picked a non-title order. Most scanner output is already
+  // stable enough, and rows remain identity-safe. Manual sort still works.
+  let out;
+  if (isPerformanceMode() && (list || []).length > 3000 && state.sortKey === "title" && !state.sortDesc) out = list;
+  else out = [...list].sort(sortComparator(state.sortKey));
   _sortCache = { key: state.sortKey, dir: state.sortDesc, rev: state.songsRev, src: list, list: out };
   return out;
 }
@@ -4323,11 +4341,15 @@ function albumIndexEntries() {
     const map = {};
     for (const s of libraryTracks()) {
       const key = s.album || "Unknown Album";
-      const arr = map[key] || (map[key] = { name: key, songs: [] });
+      const arr = map[key] || (map[key] = { name: key, songs: [], duration: 0 });
       arr.songs.push(s);
+      arr.duration += s.duration || 0;
     }
-    const entries = Object.keys(map).map(k => { map[k].songs = contextSortSongs(map[k].songs); map[k].duration = sumSongDuration(map[k].songs); return map[k]; });
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    const entries = Object.keys(map).map(k => {
+      if (!isPerformanceMode() || map[k].songs.length < 1500) map[k].songs = contextSortSongs(map[k].songs);
+      return map[k];
+    });
+    entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
     _albumIndex = { rev: state.songsRev, entries };
   }
   return _albumIndex.entries;
@@ -4339,12 +4361,19 @@ function artistIndexEntries() {
     const map = {};
     for (const s of state.songs) { // artists count every track incl. virtual
       const key = s.artist || "Unknown Artist";
-      const arr = map[key] || (map[key] = { name: key, songs: [] });
+      const arr = map[key] || (map[key] = { name: key, songs: [], duration: 0, _albums: new Set() });
       arr.songs.push(s);
+      arr.duration += s.duration || 0;
+      arr._albums.add(s.album || "Unknown Album");
     }
-    const entries = Object.keys(map).map(k => map[k]);
-    entries.forEach(e => { e.songs = contextSortSongs(e.songs); e.duration = sumSongDuration(e.songs); e.albumCount = new Set(e.songs.map(s => s.album || "Unknown Album")).size; });
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    const entries = Object.keys(map).map(k => {
+      const e = map[k];
+      if (!isPerformanceMode() || e.songs.length < 1500) e.songs = contextSortSongs(e.songs);
+      e.albumCount = e._albums.size;
+      delete e._albums;
+      return e;
+    });
+    entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
     _artistIndex = { rev: state.songsRev, entries };
   }
   return _artistIndex.entries;
@@ -4843,17 +4872,21 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   }
 
   updateActivePlayingRowInDOM();
-  renderInPlayerQueue();
+  if (isInPlayerQueueVisible()) renderInPlayerQueue();
   saveSession(true);
 }
 
+function cssSafeIdent(v) {
+  try { return (window.CSS && CSS.escape) ? CSS.escape(String(v)) : String(v).replace(/[^a-zA-Z0-9_-]/g, "\\$&"); } catch (e) { return String(v || ""); }
+}
 function updateActivePlayingRowInDOM() {
   const currentSongId = state.songs[state.currentIndex]?.id;
-  const rows = document.querySelectorAll(".song-catalog-row");
-  rows.forEach(row => {
-    const rowId = parseInt(row.dataset.songId, 10);
-    row.classList.toggle("playing-now", state.isPlaying && String(row.dataset.songId) === String(currentSongId));
+  document.querySelectorAll(".song-catalog-row.playing-now").forEach(row => {
+    if (!state.isPlaying || String(row.dataset.songId) !== String(currentSongId)) row.classList.remove("playing-now");
   });
+  if (state.isPlaying && currentSongId != null) {
+    document.querySelector(`.song-catalog-row[data-song-id="${cssSafeIdent(currentSongId)}"]`)?.classList.add("playing-now");
+  }
 }
 
 function startPlayback() {
@@ -5172,8 +5205,8 @@ function playCurrentContextShuffled() {
   let list = (ctx.songs && ctx.songs.length > 1) ? [...ctx.songs] : libraryTracks();
   if (!list.length) return;
   list.sort(() => Math.random() - 0.5);
-  state.queue = list;
-  const firstSong = state.queue.shift();
+  const firstSong = list[0];
+  state.queue = list.slice(1);
   const idx = firstSong ? resolveSongIndex(firstSong) : -1;
   if (idx !== -1) loadTrack(idx, true);
   setShuffleMode(true, false);
@@ -6092,6 +6125,11 @@ function switchPlayerStage(mode) {
   }
 }
 
+function isInPlayerQueueVisible() {
+  const v = document.getElementById("stage-queue-view");
+  return !!v && v.style.display === "flex";
+}
+
 function renderInPlayerQueue() {
   const container = document.getElementById("inplayer-queue-container");
   if (!container) return;
@@ -6121,7 +6159,9 @@ function renderInPlayerQueue() {
     return;
   }
 
-  state.queue.forEach((item, idx) => {
+  const queueRenderLimit = isPerformanceMode() ? 40 : 90;
+  const visibleQueue = state.queue.slice(0, queueRenderLimit);
+  visibleQueue.forEach((item, idx) => {
     const row = document.createElement("div");
     row.className = "queue-stage-row";
     row.innerHTML = `
@@ -6156,6 +6196,12 @@ function renderInPlayerQueue() {
 
     container.appendChild(row);
   });
+  if (state.queue.length > visibleQueue.length) {
+    const more = document.createElement("div");
+    more.className = "catalog-footer-note";
+    more.textContent = `${state.queue.length - visibleQueue.length} more tracks queued — open Queue for the full list`;
+    container.appendChild(more);
+  }
 }
 
 function moveQueueItemUp(idx) {
@@ -6310,9 +6356,10 @@ function genreIndexEntries() {
       arr.songs.push(s);
     }
     const entries = Object.keys(map).map(k => {
-      map[k].songs = contextSortSongs(map[k].songs);
-      map[k].duration = sumSongDuration(map[k].songs);
-      map[k].inferred = map[k].songs.filter(s => s.genreSource === "inferred").length;
+      if (!isPerformanceMode() || map[k].songs.length < 1500) map[k].songs = contextSortSongs(map[k].songs);
+      map[k].duration = 0;
+      map[k].inferred = 0;
+      for (const s of map[k].songs) { map[k].duration += s.duration || 0; if (s.genreSource === "inferred") map[k].inferred++; }
       return map[k];
     }).sort((a, b) => {
       if (a.name === "Unsorted") return 1;
@@ -6621,7 +6668,7 @@ function renderGenreCards() {
 
 function renderGenreDetailView(genreName, list) {
   const target = document.getElementById("library-render-target");
-  const sorted = contextSortSongs(list || []);
+  const sorted = detailSongList(list || []);
   const totalSecs = sumSongDuration(sorted);
   target.innerHTML = `
     <div style="padding: 10px 14px 4px 14px;">
@@ -6645,11 +6692,11 @@ function renderGenreDetailView(genreName, list) {
 
 function playGenreTracks(genreName, shuffle = false) {
   let songs = libraryTracks().filter(s => smartGenreOf(s) === genreName);
-  songs = contextSortSongs(songs);
+  if (!isPerformanceMode() || songs.length < 1500) songs = contextSortSongs(songs);
   if (shuffle) songs.sort(() => Math.random() - 0.5);
   if (!songs.length) return;
-  state.queue = songs.slice();
-  const first = state.queue.shift();
+  const first = songs[0];
+  state.queue = songs.slice(1);
   const idx = resolveSongIndex(first);
   if (idx !== -1) loadTrack(idx, true);
   displayToast(`${shuffle ? "Shuffling" : "Playing"} genre: ${genreName}`);
@@ -7907,6 +7954,11 @@ function trackNum(v) {
   const m = String(v).match(/\d+/);
   return m ? parseInt(m[0], 10) : 0;
 }
+function detailSongList(list) {
+  const src = list || [];
+  return (isPerformanceMode() && src.length > 1500) ? src.slice() : contextSortSongs(src);
+}
+
 function contextSortSongs(list) {
   return [...(list || [])].sort((a, b) => {
     const aa = String(a.album || "");
@@ -8277,7 +8329,7 @@ function saveSession(force) {
       path: cur.path,
       time: state.currentTime,
       duration: state.duration,
-      queue: state.queue.map(q => q.path),
+      queue: state.queue.slice(0, isPerformanceMode() ? 300 : 800).map(q => q.path),
       repeat: state.repeatMode,
       shuffle: state.shuffle,
       volume: state.volume,
@@ -8294,7 +8346,8 @@ function restoreSession() {
   const idx = state.songs.findIndex(x => x.path === s.path);
   if (idx < 0) return;
   if (Array.isArray(s.queue)) {
-    state.queue = s.queue.map(p => state.songs.find(x => x.path === p)).filter(Boolean);
+    const byPath = new Map(state.songs.map(x => [x.path, x]));
+    state.queue = s.queue.map(p => byPath.get(p)).filter(Boolean);
   }
   state.shuffle = !!s.shuffle;
   state.repeatMode = typeof s.repeat === "number" ? s.repeat : 0;
@@ -8574,9 +8627,10 @@ function playFolderScope(uri, relPath, shuffle) {
   if (!node) return;
   const songs = shuffle ? shuffleArray(flattenFolderNode(node)) : flattenFolderNode(node);
   if (songs.length === 0) return;
-  state.queue = songs.slice();
-  const idx = state.songs.indexOf(songs[0]);
-  loadTrack(idx, true);
+  const firstSong = songs[0];
+  state.queue = songs.slice(1);
+  const idx = firstSong ? resolveSongIndex(firstSong) : -1;
+  if (idx !== -1) loadTrack(idx, true);
   displayToast(`Playing ${node.relPath ? dirBaseName(node.relPath) : folderRootByUri(uri)?.name || "folder"} — ${songs.length} tracks`);
 }
 
@@ -8867,8 +8921,9 @@ function attachFullPlayerFluidGestures() {
 }
 
 function playFolderTracks(folderPath, shuffle) {
-  const folders = buildFolderIndex();
-  const list = (folders[folderPath] || []).map(e => e.song).sort(sortComparator(state.sortKey));
+  const folders = buildFolderIndexCached();
+  const rawList = (folders[folderPath] || []).map(e => e.song);
+  const list = (isPerformanceMode() && rawList.length > 1500) ? rawList : rawList.sort(sortComparator(state.sortKey));
   if (list.length === 0) return;
   let playList = list;
   if (shuffle) {
@@ -8878,8 +8933,9 @@ function playFolderTracks(folderPath, shuffle) {
       [playList[i], playList[j]] = [playList[j], playList[i]];
     }
   }
-  state.queue = [...playList];   // queue holds song objects (matches executePlayNext)
-  const idx = playList[0] ? resolveSongIndex(playList[0]) : -1;
+  const firstSong = playList[0];
+  state.queue = playList.slice(1);   // queue holds song objects (matches executePlayNext)
+  const idx = firstSong ? resolveSongIndex(firstSong) : -1;
   if (idx !== -1) loadTrack(idx, true);
   displayToast(`Playing folder: ${dirBaseName(folderPath)}`);
 }
@@ -8982,7 +9038,7 @@ function buildSongRow(s, rowIndex) {
   row.className = `song-catalog-row ${isPlayingThis ? 'playing-now' : ''}`;
   row.dataset.songId = s.id;
   row.dataset.path = s.path || s.url || "";
-  row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
+  if (!isPerformanceMode()) row.style.animationDelay = `${Math.min(rowIndex * 40, 320)}ms`;
 
   row.innerHTML = (opts && opts.leadHtml ? opts.leadHtml(s, rowIndex) : songRowLeadHtml(s, rowIndex))
     + (opts && opts.noAlbumLine ? `<div class="row-meta-content"><div class="row-title-line">${s.title}</div><div class="row-details-line"><span>${s.artist}</span></div></div>` : "")
@@ -9151,7 +9207,7 @@ function renderAlbumCards() {
 
 function renderAlbumDetailView(albumName, list) {
   const target = document.getElementById("library-render-target");
-  const sorted = contextSortSongs(list || []);
+  const sorted = detailSongList(list || []);
   const first = sorted[0];
   const totalSecs = sumSongDuration(sorted);
 
@@ -9193,11 +9249,13 @@ function renderAlbumDetailView(albumName, list) {
 function playAlbumTracks(albumName, shuffle = false) {
   const albumSongs = state.songs.filter(s => s.album === albumName);
   if (albumSongs.length === 0) return;
-  state.queue = contextSortSongs(albumSongs);
+  let playList = (isPerformanceMode() && albumSongs.length > 1500) ? albumSongs : contextSortSongs(albumSongs);
   if (shuffle) {
-    state.queue.sort(() => Math.random() - 0.5);
+    playList = [...playList];
+    playList.sort(() => Math.random() - 0.5);
   }
-  const firstSong = state.queue.shift();
+  const firstSong = playList[0];
+  state.queue = playList.slice(1);
   const idx = firstSong ? resolveSongIndex(firstSong) : -1;
   if (idx !== -1) loadTrack(idx, true);
   refreshBadges();
@@ -9228,10 +9286,10 @@ function renderArtistCards() {
 
 function renderArtistDetailView(artistName, list) {
   const target = document.getElementById("library-render-target");
-  const sorted = contextSortSongs(list || []);
+  const sorted = detailSongList(list || []);
   const first = sorted[0];
   if (!first) return;
-  const totalSecs = sorted.reduce((acc, cur) => acc + (cur.duration || 0), 0);
+  const totalSecs = sumSongDuration(sorted);
   const albumCount = new Set(sorted.map(s => s.album || "Unknown Album")).size;
 
   target.innerHTML = `
@@ -9265,11 +9323,12 @@ function renderArtistDetailView(artistName, list) {
 }
 
 function playArtistTracks(artistName, shuffle = false) {
-  const artistSongs = contextSortSongs(state.songs.filter(s => !s.virtual && s.artist === artistName));
+  const artistRaw = state.songs.filter(s => !s.virtual && s.artist === artistName);
+  let artistSongs = (isPerformanceMode() && artistRaw.length > 1500) ? artistRaw : contextSortSongs(artistRaw);
   if (artistSongs.length === 0) return;
-  state.queue = [...artistSongs];
-  if (shuffle) state.queue.sort(() => Math.random() - 0.5);
-  const firstSong = state.queue.shift();
+  if (shuffle) { artistSongs = [...artistSongs]; artistSongs.sort(() => Math.random() - 0.5); }
+  const firstSong = artistSongs[0];
+  state.queue = artistSongs.slice(1);
   const idx = firstSong ? resolveSongIndex(firstSong) : -1;
   if (idx !== -1) loadTrack(idx, true);
   refreshBadges();
@@ -9615,7 +9674,9 @@ function renderQueueList() {
     return;
   }
 
-  state.queue.forEach((item, idx) => {
+  const queueRenderLimit = isPerformanceMode() ? 40 : 90;
+  const visibleQueue = state.queue.slice(0, queueRenderLimit);
+  visibleQueue.forEach((item, idx) => {
     const row = document.createElement("div");
     row.className = "song-catalog-row";
     row.innerHTML = `
@@ -9644,6 +9705,12 @@ function renderQueueList() {
     };
     container.appendChild(row);
   });
+  if (state.queue.length > visibleQueue.length) {
+    const more = document.createElement("div");
+    more.className = "catalog-footer-note";
+    more.textContent = `${state.queue.length - visibleQueue.length} more tracks queued — use search or keep playing; rendering is capped for smoothness`;
+    container.appendChild(more);
+  }
 }
 
 function removeQueueItem(idx) {
