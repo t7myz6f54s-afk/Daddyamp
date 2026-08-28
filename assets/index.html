@@ -3570,8 +3570,8 @@ window.addEventListener("DOMContentLoaded", () => {
   refreshBadges();
   syncFluidSettingsUI();
   selectLibraryTab("tracks");
-  loadTrack(state.currentIndex, false);
-  if (state.songs[state.currentIndex]) setAmbientArt(state.songs[state.currentIndex].artwork || "artwork/default.png", true);
+  hydrateIdlePlayerFromLibrary();
+  syncSystemVolumeFromAndroid();
   initFolderSystem();
   attachCoverGestures();
   attachCatalogLoadMore();
@@ -3972,6 +3972,36 @@ function commitSeek() {
 
 let playGen = 0;
 
+function hydrateIdlePlayerFromLibrary() {
+  // Startup must be cheap: do not run full loadTrack() here because it can
+  // fetch lyrics, extract palettes, update media sessions and touch native
+  // playback before the UI has settled. Just paint the remembered/first row.
+  if (!state.songs || state.songs.length === 0) return;
+  let idx = Math.max(0, Math.min(state.currentIndex || 0, state.songs.length - 1));
+  try {
+    const sess = JSON.parse(localStorage.getItem("daddyamp_session") || "null");
+    if (sess && sess.path) {
+      const found = state.songs.findIndex(x => x && x.path === sess.path);
+      if (found >= 0) idx = found;
+    }
+  } catch (e) {}
+  const song = ensureTrackId(state.songs[idx]);
+  if (!song) return;
+  state.currentIndex = idx;
+  document.getElementById("mini-meta-title").textContent = song.title || "No track selected";
+  const miniArtistLine = document.getElementById("mini-meta-artist");
+  if (miniArtistLine) miniArtistLine.textContent = song.artist || "DaddyAmp";
+  document.getElementById("mini-thumb-img").src = song.artwork || "artwork/default.png";
+  document.getElementById("player-song-title").textContent = song.title || "No track selected";
+  document.getElementById("player-song-artist").textContent = `${song.artist || 'Unknown Artist'} • ${song.album || 'Library'}`;
+  document.getElementById("player-artwork-img").src = song.artwork || "artwork/default.png";
+  state.duration = song.duration || 0;
+  state.currentTime = 0;
+  updateTimerDisplays();
+  updateHeartVisuals(song.favorite);
+  setAmbientArt(song.artwork || "artwork/default.png", true);
+}
+
 function loadTrack(index, autoPlay = true, preSeekMs = null) {
   if (index < 0 || index >= state.songs.length) return;
   const song = ensureTrackId(state.songs[index]);
@@ -4116,6 +4146,7 @@ function startPlayback() {
       ? song.path 
       : "file:///android_asset/" + song.path;
     const ok = window.AndroidBridge.playAudio(audioPath);
+    applyAudioVolume();
     if (ok === false) scheduleVerifiedAudioError(state.playGen); // sync failure
     window.AndroidBridge.setTempo(state.settings.tempo || 1.0);
   } else {
@@ -4460,9 +4491,41 @@ function toggleTimeRemainingDisplay() {
    VOLUME CONTROL & SYSTEM MUTE
    ========================================================================= */
 
+function syncVolumeSliderFromState() {
+  const slider = document.getElementById("vol-level-slider");
+  if (slider) slider.value = Math.max(0, Math.min(100, parseInt(state.volume || 0, 10)));
+}
+
+function syncSystemVolumeFromAndroid() {
+  if (!isAndroid || !window.AndroidBridge.getSystemVolumePercent) {
+    syncVolumeSliderFromState();
+    updateSpeakerIcon();
+    return;
+  }
+  try {
+    const pct = window.AndroidBridge.getSystemVolumePercent();
+    if (isFinite(pct)) {
+      state.volume = Math.max(0, Math.min(100, parseInt(pct, 10)));
+      state.isMuted = state.volume === 0;
+    }
+  } catch (e) {}
+  syncVolumeSliderFromState();
+  updateSpeakerIcon();
+}
+
+window.onSystemVolumeChanged = function(percent) {
+  const pct = Math.max(0, Math.min(100, parseInt(percent, 10) || 0));
+  state.volume = pct;
+  state.isMuted = pct === 0;
+  syncVolumeSliderFromState();
+  updateSpeakerIcon();
+  try { if (isAndroid && window.AndroidBridge.setVolume) window.AndroidBridge.setVolume(1.0); } catch (e) {}
+};
+
 function adjustVolumeLevel(v) {
-  state.volume = parseInt(v, 10);
+  state.volume = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
   state.isMuted = state.volume === 0;
+  syncVolumeSliderFromState();
   updateSpeakerIcon();
   applyAudioVolume();
 }
@@ -4483,20 +4546,31 @@ function updateSpeakerIcon() {
 function toggleMuteVolume() {
   if (state.isMuted) {
     state.isMuted = false;
-    state.volume = 75;
-    document.getElementById("vol-level-slider").value = 75;
+    state.volume = state.lastNonZeroVolume || 75;
   } else {
+    if (state.volume > 0) state.lastNonZeroVolume = state.volume;
     state.isMuted = true;
-    document.getElementById("vol-level-slider").value = 0;
+    state.volume = 0;
   }
+  syncVolumeSliderFromState();
   updateSpeakerIcon();
   applyAudioVolume();
 }
 
 function applyAudioVolume() {
   const fraction = state.isMuted ? 0.0 : state.volume / 100.0;
-  if (isAndroid) window.AndroidBridge.setVolume(fraction);
-  else audioEl.volume = fraction;
+  if (isAndroid) {
+    try {
+      if (window.AndroidBridge.setSystemVolumePercent) {
+        window.AndroidBridge.setSystemVolumePercent(Math.round(fraction * 100));
+        if (window.AndroidBridge.setVolume) window.AndroidBridge.setVolume(1.0);
+      } else if (window.AndroidBridge.setVolume) {
+        window.AndroidBridge.setVolume(fraction);
+      }
+    } catch (e) {}
+  } else {
+    audioEl.volume = fraction;
+  }
 }
 
 /* =========================================================================
@@ -6496,8 +6570,13 @@ async function folderAutoRescan() {
 
 async function initFolderSystem() {
   await folderInit();
-  if (folderState.roots.length > 0) folderAutoRescan();
   restoreSession();
+  if (folderState.roots.length > 0 && state.settings.folderAutoScan !== false) {
+    // Do not hammer SAF/MediaStore during first paint. Startup lag came from
+    // auto-rescans beginning immediately while the WebView was still building
+    // the library. Let the app become interactive first.
+    setTimeout(folderAutoRescan, 8000);
+  }
 }
 
 /* ------------------------------------------------------- session restore */
@@ -8191,6 +8270,7 @@ window.handleAndroidBack = function() {
 
 // Android MediaPlayer Event Bridge Hooks
 window.onAudioPrepared = function(durMs) {
+  applyAudioVolume();
   // This load genuinely works — a stale error can never overrule it.
   state.audioReadyGen = state.playGen;
   hideErrorToast();

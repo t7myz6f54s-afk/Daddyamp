@@ -86,3 +86,12 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Native imports now use stable URI-derived ids instead of time/random ids, preventing duplicate identities after re-import/restart.
 - Folder scanner progress emission no longer depends on a shared active-root field, so concurrent/root-overlapping scans cannot report progress against the wrong root.
 - Rebuilt signed APK as versionCode 16 / versionName 1.15.
+
+## v1.16 — crash-after-play + startup lag + Android volume sync
+
+- Playback stability: Android AudioFX (Equalizer/BassBoost/Virtualizer) is no longer attached eagerly on every song prepare. It now attaches lazily only when DSP controls are used, avoiding vendor MediaPlayer/AudioEffect crashes that can happen seconds after playback starts.
+- Startup lag: removed the automatic `loadTrack(..., false)` boot path. Startup now hydrates the mini/full player cheaply without fetching lyrics, extracting palette, updating media session, or touching native playback.
+- Startup lag: folder auto-rescan is deferred 8 seconds after folder DB/session restore so the WebView becomes interactive first.
+- Performance: Android playback polling remains lighter, with duration calls throttled.
+- Volume sync: added native STREAM_MUSIC volume observer and JS bridge. Hardware volume buttons now update the DaddyAmp volume slider/icon. The in-app slider now controls the same Android media volume instead of a disconnected per-player value.
+- Rebuilt signed APK as versionCode 17 / versionName 1.16.

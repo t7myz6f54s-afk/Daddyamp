@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.database.ContentObserver;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -33,6 +34,7 @@ import android.os.Vibrator;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Base64;
 import android.util.Log;
 import android.view.WindowManager;
@@ -73,6 +75,9 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     private boolean playbackActive = false;
     private Visualizer nativeVisualizer = null;
     private boolean vizCaptureOn = false;
+    private boolean audioFxRequested = false;
+    private ContentObserver volumeObserver = null;
+    private int lastVolumePercent = -1;
     private int audioSessionId = 0;
     private int vizSessionId = 0;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -97,6 +102,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
         this.folderEngine = new FolderEngine(activity, webView);
         setupNoisyReceiver();
         setupMediaSession();
+        setupSystemVolumeObserver();
     }
 
     private void setupNoisyReceiver() {
@@ -173,6 +179,59 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
                 activity.unregisterReceiver(noisyReceiver);
                 isReceiverRegistered = false;
             } catch (Exception ignored) {}
+        }
+    }
+
+    private void setupSystemVolumeObserver() {
+        try {
+            lastVolumePercent = getMusicVolumePercent();
+            volumeObserver = new ContentObserver(handler) {
+                @Override
+                public void onChange(boolean selfChange) {
+                    super.onChange(selfChange);
+                    notifySystemVolumeIfChanged(false);
+                }
+            };
+            activity.getContentResolver().registerContentObserver(
+                    Settings.System.CONTENT_URI, true, volumeObserver);
+        } catch (Exception e) {
+            Log.w(TAG, "System volume observer unavailable: " + e.getMessage());
+        }
+    }
+
+    private int getMusicVolumePercent() {
+        try {
+            if (audioManager == null) return 75;
+            int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            int cur = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+            return Math.max(0, Math.min(100, Math.round((cur * 100.0f) / max)));
+        } catch (Exception e) {
+            return 75;
+        }
+    }
+
+    private void notifySystemVolumeIfChanged(boolean force) {
+        final int pct = getMusicVolumePercent();
+        if (!force && pct == lastVolumePercent) return;
+        lastVolumePercent = pct;
+        runOnJs("if (window.onSystemVolumeChanged) { window.onSystemVolumeChanged(" + pct + "); }");
+    }
+
+    @JavascriptInterface
+    public int getSystemVolumePercent() {
+        return getMusicVolumePercent();
+    }
+
+    @JavascriptInterface
+    public void setSystemVolumePercent(int percent) {
+        try {
+            if (audioManager == null) return;
+            int max = Math.max(1, audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC));
+            int target = Math.round(Math.max(0, Math.min(100, percent)) * max / 100.0f);
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0);
+            notifySystemVolumeIfChanged(true);
+        } catch (Exception e) {
+            Log.w(TAG, "setSystemVolumePercent failed: " + e.getMessage());
         }
     }
 
@@ -580,6 +639,13 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
             vizCaptureOn = false;
         }
         this.audioSessionId = audioSessionId;
+        if (!audioFxRequested) {
+            // Stability/performance: do not attach Android AudioEffect engines on
+            // every play. Some vendor ROMs crash media_server/WebView after a few
+            // seconds with eager EQ/Bass/Virtualizer. Attach lazily only after the
+            // user touches DSP controls.
+            return;
+        }
         try {
             if (nativeEqualizer != null) {
                 try { nativeEqualizer.release(); } catch (Exception ignored) {}
@@ -641,9 +707,17 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
         return caps.toString();
     }
 
+    private void ensureAudioFxAttached() {
+        audioFxRequested = true;
+        if (audioSessionId != 0 && nativeEqualizer == null) {
+            setupAudioFx(audioSessionId);
+        }
+    }
+
     @JavascriptInterface
     public void setNativeEqBand(int band, int millibels) {
         try {
+            ensureAudioFxAttached();
             if (nativeEqualizer != null && nativeEqualizer.getEnabled()) {
                 short min = nativeEqualizer.getBandLevelRange()[0];
                 short max = nativeEqualizer.getBandLevelRange()[1];
@@ -657,6 +731,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     @JavascriptInterface
     public void setNativeBassBoost(int strength) {
         try {
+            ensureAudioFxAttached();
             if (nativeBassBoost != null && nativeBassBoost.getEnabled()) {
                 short target = (short) Math.max(0, Math.min(1000, strength));
                 nativeBassBoost.setStrength(target);
@@ -667,6 +742,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     @JavascriptInterface
     public void setNativeVirtualizer(int strength) {
         try {
+            ensureAudioFxAttached();
             if (nativeVirtualizer != null && nativeVirtualizer.getStrengthSupported()) {
                 short target = (short) Math.max(0, Math.min(1000, strength));
                 nativeVirtualizer.setStrength(target);
@@ -1406,6 +1482,11 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
         unregisterNoisyReceiver();
         abandonAudioFocus();
         updateKeepScreenOn(false);
+
+        if (volumeObserver != null) {
+            try { activity.getContentResolver().unregisterContentObserver(volumeObserver); } catch (Exception ignored) {}
+            volumeObserver = null;
+        }
 
         if (mediaSession != null) {
             try {
