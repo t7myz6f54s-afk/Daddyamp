@@ -3255,6 +3255,20 @@ html.is-breathing.rms-breath #player-artwork-img,
 .player-ambient-layer { animation: none !important; }
 .row-artwork-frame::before, .mini-cover-shell::before, .album-thumb-container::before, .drilldown-art-box::before { animation: none !important; }
 
+/* v1.43 runaway-scroll kill. ROOT CAUSE: overflow-anchor is NOT inherited, so the
+   v1.41 fix (overflow-anchor:none on .simple-virtual-list only) still let Chromium
+   pick any rebuilt row/img inside as a scroll anchor. Every rebuild mutated the
+   tree + changed the rows' translate, the anchor then "compensated" scrollTop, and
+   scroll-behavior:smooth turned each compensation into an ANIMATED scroll — firing
+   more scroll events → more rebuilds → more compensation. A self-sustaining
+   downward drift: the library scrolled itself forever, rows shifted under taps
+   ("wrong song") and covers flickered. Kill scroll anchoring for the whole catalog
+   subtree + force instant programmatic scroll behavior here. Explicit
+   scrollTo({behavior:'smooth'}) calls (tab switch, portal) are unaffected. */
+.simple-virtual-list, .simple-virtual-list * { overflow-anchor: none !important; }
+.song-rows-catalog, .song-rows-catalog * { overflow-anchor: none !important; }
+#library-scroll-container { scroll-behavior: auto !important; }
+
 </style>
 </head>
 <body>
@@ -4363,6 +4377,9 @@ let state = {
     replayLeveling: true,
     performanceMode: "auto",
     visualRecoveryVersion: 139,
+    // NOTE: artRecoveryVersion intentionally NOT defaulted here — defaults merge
+    // into upgraded users' settings too, and a pre-set stamp would skip the
+    // one-time recovery exactly for the users who need it (v1.36's mistake).
     transparentBackground: false,
     wallpaperDim: 0.74,
     listTapOpenPlayer: false,
@@ -4413,7 +4430,12 @@ document.addEventListener("visibilitychange", handleAppVisibilityChange);
 
 const audioEl = document.getElementById("html5-audio-element");
 const canvas = document.getElementById("poweramp-canvas-scrubber");
-const ctx = canvas.getContext("2d");
+// 2D context may be unavailable (sandboxed/failed WebView renderer): a null-object
+// keeps the whole scrubber path inert instead of aborting app mount (BOOT_ERROR).
+const ctx = (function () {
+  try { const c = canvas.getContext("2d"); if (c) return c; } catch (e) {}
+  return new Proxy({}, { get: (t, k) => (k === "canvas" ? canvas : () => undefined), set: () => true });
+})();
 
 const isAndroid = typeof window.AndroidBridge !== "undefined";
 
@@ -5950,6 +5972,7 @@ function extractCoverPalette(song) {
       const c = document.createElement("canvas");
       c.width = 30; c.height = 30;
       const x = c.getContext("2d");
+      if (!x) return; // no 2D raster: keep current accent, never crash palette pass
       x.drawImage(img, 0, 0, 30, 30);
       const d = x.getImageData(0, 0, 30, 30).data;
       let r = 0, g = 0, b = 0, count = 0;
@@ -6061,6 +6084,16 @@ function handleManualEqSlider(bandIdx, val) {
   if (webAudio.filters && webAudio.filters[bandIdx]) {
     webAudio.filters[bandIdx].gain.value = gain;
   }
+  // v1.43: manual bands must drive the native EQ too — the slider previously only
+  // moved WebAudio (desktop) so on Android it was a silent control (fake-control bug).
+  try {
+    if (isAndroid && window.AndroidBridge && window.AndroidBridge.setNativeEqBand) {
+      window.AndroidBridge.setNativeEqBand(bandIdx, gain * 100);
+      if (bandIdx === 0 && window.AndroidBridge.setNativeBassBoost) {
+        window.AndroidBridge.setNativeBassBoost(gain > 0 ? gain * 120 : 0);
+      }
+    }
+  } catch (e) {}
 }
 
 /* =========================================================================
@@ -8249,7 +8282,46 @@ function ensureTrackId(t) {
   if (t.id == null || t.id === "") {
     t.id = (t.url || t.path) ? folderTrackId(t.url || t.path) : (Date.now() + Math.floor(Math.random() * 1e6));
   }
+  sanitizeTrackArtwork(t);
   return t;
+}
+
+/* v1.43 artwork honesty gate. Native fast-scans (pre-v1.43) handed the WebView
+   content://media/external/audio/albumart URIs, which an file:// page cannot
+   render on current WebView builds — every cover collapsed to the placeholder
+   ("artwork taken down"). v1.43 native emits cached file:// art instead; this
+   gate neutralizes stale content:// art persisted in old libraries so rows,
+   player and ambient walls render a honest placeholder until the one-time
+   recovery re-scan (maybeRunArtworkRecovery) replaces them with real art. */
+function sanitizeTrackArtwork(t) {
+  if (t && typeof t.artwork === "string" && t.artwork.startsWith("content://media/external/audio/albumart")) {
+    t.artwork = "";
+  }
+}
+
+/* One-time per-upgrade recovery: re-scan enabled folder roots so the native
+   side can repopulate artwork as renderable file:// caches. Runs at most once
+   per install (versioned), only on Android, only when stale art exists. */
+function maybeRunArtworkRecovery() {
+  try {
+    if (!isAndroid) { if (state.settings.artRecoveryVersion == null) { state.settings.artRecoveryVersion = 143; persistState(); } return; }
+    if (Number(state.settings.artRecoveryVersion || 0) >= 143) return;
+    state.settings.artRecoveryVersion = 143;
+    persistState();
+    const roots = (typeof folderState !== "undefined" && folderState.roots) ? folderState.roots : [];
+    if (!roots.some(r => r && r.enabled)) return;
+    // Stale content:// albumart persisted by pre-v1.43 builds (unrenderable in WebView)?
+    // If the catalog is clean and the scheduled auto-rescan (8s) is enabled it will
+    // naturally repaint art — avoid a duplicate boot scan. Otherwise recover now.
+    let stale = false;
+    if (typeof folderState !== "undefined" && folderState.tracks && folderState.tracks.forEach) {
+      folderState.tracks.forEach(s => {
+        if (s && typeof s.artwork === "string" && s.artwork.startsWith("content://media/external/audio/albumart")) stale = true;
+      });
+    }
+    if (!stale && state.settings.folderAutoScan !== false) return;
+    roots.forEach(r => { if (r && r.enabled) startFolderScan(r.uri, false); });
+  } catch (e) {}
 }
 
 // THE identity contract: a row's SONG OBJECT is the only thing it may load.
@@ -8546,6 +8618,7 @@ async function folderInit() {
   folderApplyToLibrary._rev = undefined; // fresh catalog load → apply must run once
   folderApplyToLibrary();
   if (typeof renderLibraryTab === "function") renderLibraryTab();
+  maybeRunArtworkRecovery();
 }
 
 /* ---------------------------------------------------------------- scan flow */
@@ -8608,7 +8681,14 @@ window.onFolderScanProgress = function(p) {
     const root = folderRootByUri(uri);
     if (root) { root.lastScan = Date.now(); root.accessLost = false; }
     persistFolderRoots();
-    if (changed || (p.removedCount || 0) > 0) folderMergeNow(); else folderApplyToLibrary();
+    // v1.43 data-loss kill: persistence must happen EXACTLY ONCE per scan, here at
+    // done — never gated on `changed`. Changes usually arrive in earlier progress
+    // batches; a done event with an empty trailing batch (exact batch-boundary
+    // library) previously skipped folderMergeNow → the whole catalog silently
+    // vanished on restart even though the library looked fine during the scan.
+    // persistFolderSongs is chunked+single-shot per scan (v1.14 contract), and
+    // folderApplyToLibrary self-guards no-op rebuilds. Unconditional is correct.
+    folderMergeNow();
     if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
     if (state.currentTab === "folders") renderLibraryTab();
     if (p.error) {
@@ -9411,7 +9491,8 @@ function updateSimpleVirtualRows(force) {
   const end = Math.min(total, start + count);
   if (!force && start === ctx.start && end === ctx.end) return;
   ctx.start = start; ctx.end = end;
-  ctx.rows.style.transform = `translate3d(0, ${start * ctx.rowH}px, 0)`;
+  const y = start * ctx.rowH;
+  if (ctx._lastY !== y) { ctx._lastY = y; ctx.rows.style.transform = `translate3d(0, ${y}px, 0)`; }
   const frag = document.createDocumentFragment();
   for (let i = start; i < end; i++) frag.appendChild(simpleSongRow(ctx.tracks[i], i));
   ctx.rows.replaceChildren(frag);

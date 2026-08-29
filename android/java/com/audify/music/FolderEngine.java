@@ -45,7 +45,7 @@ public class FolderEngine extends SQLiteOpenHelper {
     private static final long IGNORE_SHORT_DEFAULT_MS = 10_000L;
     private static final String[] AUDIO_EXT = {"mp3","m4a","aac","flac","ogg","opus","wav","wma","ape","aiff","aif","mp4","mka","dsf"};
 
-    private final Activity activity;
+    private Activity activity; // re-attachable since v1.44 (AppHolder survival)
     private final WebView webView;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Set<String> scanning = new HashSet<>();
@@ -61,6 +61,11 @@ public class FolderEngine extends SQLiteOpenHelper {
         super(activity, "daddyamp_folders.db", null, 1);
         this.activity = activity;
         this.webView = webView;
+    }
+
+    /** FolderEngine survives Activity tears via AppHolder; swap in the fresh owner. */
+    public synchronized void attachActivity(Activity newActivity) {
+        if (newActivity != null) this.activity = newActivity;
     }
 
     @Override
@@ -488,6 +493,7 @@ public class FolderEngine extends SQLiteOpenHelper {
                                         long ignoreShortMs, long startMs) throws Exception {
         final JSONArray batch = new JSONArray();
         final java.util.Map<String, String> current = new java.util.HashMap<>();
+        final Set<String> artThisRun = new HashSet<>();
         int scanned = 0, added = 0;
 
         db.beginTransaction();
@@ -496,7 +502,7 @@ public class FolderEngine extends SQLiteOpenHelper {
             for (MsMeta m : msIndex.values()) {
                 if (m == null || m.data == null || m.durationMs <= 0) continue;
                 if (ignoreShortMs > 0 && m.durationMs < ignoreShortMs) continue;
-                JSONObject song = buildSongFastFromStore(tree, rootName, msPrefix, m);
+                JSONObject song = buildSongFastFromStore(tree, rootName, msPrefix, m, artThisRun);
                 if (song == null) continue;
                 String uri = song.optString("url", "");
                 if (uri.isEmpty()) continue;
@@ -541,7 +547,47 @@ public class FolderEngine extends SQLiteOpenHelper {
         while (batch.length() > 0) batch.remove(0);
     }
 
-    private JSONObject buildSongFastFromStore(Uri tree, String rootName, String msPrefix, MsMeta m) {
+    /** MediaStore album art decoded once per album id and cached on disk as file://.
+        Emitted instead of the raw content://media/external/audio/albumart URI because
+        the WebView hosts a file:// page and current WebView builds refuse to paint
+        content:// images there (the v1.42 "no covers anywhere" bug). */
+    private String extractStoreAlbumArt(Uri tree, long albumId, Set<String> artThisRun) {
+        if (albumId <= 0) return "";
+        try {
+            String key = "msaid" + albumId;
+            String fileKey = sha1(tree.toString() + "|" + key);
+            File dir = new File(activity.getCacheDir(), "art");
+            if (!dir.exists()) dir.mkdirs();
+            File out = new File(dir, fileKey + ".jpg");
+            if (!out.exists() && !artThisRun.contains(key)) {
+                artThisRun.add(key);
+                Uri artUri = ContentUris.withAppendedId(
+                        Uri.parse("content://media/external/audio/albumart"), albumId);
+                java.io.InputStream in = null;
+                try {
+                    in = activity.getContentResolver().openInputStream(artUri);
+                    if (in != null) {
+                        android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(in);
+                        if (bmp != null) {
+                            FileOutputStream fos = new FileOutputStream(out);
+                            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, fos);
+                            fos.close();
+                            bmp.recycle();
+                        }
+                    }
+                } finally {
+                    if (in != null) try { in.close(); } catch (Exception ignored) {}
+                }
+            }
+            if (out.exists() && out.length() > 512) {
+                return "file://" + out.getAbsolutePath();
+            }
+        } catch (Exception ignored) {}
+        return "";
+    }
+
+    private JSONObject buildSongFastFromStore(Uri tree, String rootName, String msPrefix, MsMeta m,
+                                              Set<String> artThisRun) {
         try {
             Uri contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, m.id);
             String rel = "";
@@ -566,7 +612,10 @@ public class FolderEngine extends SQLiteOpenHelper {
             song.put("url", contentUri.toString()); song.put("path", contentUri.toString()); song.put("filePath", m.data != null ? m.data : "");
             song.put("rootUri", tree.toString()); song.put("folderPath", rel); song.put("source", "folder"); song.put("docName", name);
             song.put("favorite", 0); song.put("play_count", 0); song.put("lyrics", ""); song.put("imported", true);
-            song.put("artwork", m.albumId > 0 ? ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), m.albumId).toString() : "");
+            // v1.43: WebView (file:// page) cannot render content:// albumart URIs —
+            // decode MediaStore art natively into the disk cache and emit file:// like
+            // the retriever paths do. At most one decode per album id per run.
+            song.put("artwork", extractStoreAlbumArt(tree, m.albumId, artThisRun));
             return song;
         } catch (Exception e) { return null; }
     }

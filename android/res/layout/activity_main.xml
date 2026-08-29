@@ -1,13 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Bare container: the WebView is attached programmatically so MainActivity can
+     either create it fresh or re-attach the AppHolder-survived one (v1.44). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/webview_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent">
-
-    <WebView
-        android:id="@+id/webview"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@android:color/transparent" />
-
-</FrameLayout>
+    android:background="@android:color/transparent" />
