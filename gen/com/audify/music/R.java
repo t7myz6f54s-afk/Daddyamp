@@ -15,7 +15,7 @@ public final class R {
     public static final int primary_dark=0x7f010003;
   }
   public static final class id {
-    public static final int webview=0x7f020000;
+    public static final int webview_container=0x7f020000;
   }
   public static final class layout {
     public static final int activity_main=0x7f030000;

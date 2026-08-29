@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
 
     private WebView webView;
     private AudifyBridge bridge;
-    private ValueCallback<Uri[]> filePathCallback;
+    private HostedChromeClient chromeClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,13 +42,41 @@ public class MainActivity extends Activity {
 
         setContentView(R.layout.activity_main);
 
-        webView = findViewById(R.id.webview);
-        setupWebView();
+        // v1.44 swipe-survival: if the bridge survived an Activity teardown while
+        // playing, the SAME WebView (and its live audio engine + JS state) is
+        // re-attached instead of cold-loading the app again.
+        android.widget.FrameLayout container = findViewById(R.id.webview_container);
+        if (AppHolder.webView != null && AppHolder.bridge != null) {
+            webView = AppHolder.webView;
+            if (webView.getParent() != null) {
+                ((android.view.ViewGroup) webView.getParent()).removeView(webView);
+            }
+            container.addView(webView, new android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            bridge = AppHolder.bridge;
+            bridge.attachActivity(this);
+            chromeClient = AppHolder.chromeClient;
+            if (chromeClient != null) {
+                chromeClient.cancelChooser(); // any chooser on the dead activity is void
+                chromeClient.setHost(this);
+            }
+        } else {
+            webView = new WebView(this);
+            webView.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+            container.addView(webView);
+            setupWebView();
 
-        bridge = new AudifyBridge(this, webView);
-        webView.addJavascriptInterface(bridge, "AndroidBridge");
+            bridge = new AudifyBridge(this, webView);
+            webView.addJavascriptInterface(bridge, "AndroidBridge");
+            AppHolder.webView = webView;
+            AppHolder.bridge = bridge;
+            AppHolder.chromeClient = chromeClient;
 
-        webView.loadUrl("file:///android_asset/index.html");
+            webView.loadUrl("file:///android_asset/index.html");
+        }
     }
 
     private void setupWebView() {
@@ -79,59 +107,9 @@ public class MainActivity extends Activity {
         webView.setHorizontalScrollBarEnabled(false);
         webView.setBackgroundColor(Color.TRANSPARENT);
 
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
-                new android.app.AlertDialog.Builder(view.getContext())
-                        .setMessage(message)
-                        .setPositiveButton("Yes", new android.content.DialogInterface.OnClickListener() {
-                            public void onClick(android.content.DialogInterface d, int w) { result.confirm(); }
-                        })
-                        .setNegativeButton("Cancel", new android.content.DialogInterface.OnClickListener() {
-                            public void onClick(android.content.DialogInterface d, int w) { result.cancel(); }
-                        })
-                        .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
-                            public void onCancel(android.content.DialogInterface d) { result.cancel(); }
-                        })
-                        .show();
-                return true;
-            }
-
-            @Override
-            public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {
-                new android.app.AlertDialog.Builder(view.getContext())
-                        .setMessage(message)
-                        .setPositiveButton("OK", new android.content.DialogInterface.OnClickListener() {
-                            public void onClick(android.content.DialogInterface d, int w) { result.confirm(); }
-                        })
-                        .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
-                            public void onCancel(android.content.DialogInterface d) { result.cancel(); }
-                        })
-                        .show();
-                return true;
-            }
-
-            @Override
-            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
-                if (filePathCallback != null) {
-                    filePathCallback.onReceiveValue(null);
-                }
-                filePathCallback = callback;
-
-                try {
-                    Intent intent = fileChooserParams.createIntent();
-                    startActivityForResult(intent, FILE_CHOOSER_REQUEST);
-                    return true;
-                } catch (Exception e) {
-                    Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-                    intent.setType("audio/*");
-                    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    startActivityForResult(Intent.createChooser(intent, "Select Audio Files"), FILE_CHOOSER_REQUEST);
-                    return true;
-                }
-            }
-        });
+        chromeClient = new HostedChromeClient();
+        chromeClient.setHost(this);
+        webView.setWebChromeClient(chromeClient);
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -142,12 +120,28 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** Launches the system file picker for the current host activity (host of
+     * record for HostedChromeClient, kept swappable across Activity relaunches). */
+    void launchFilePicker(WebChromeClient.FileChooserParams params) {
+        try {
+            Intent intent = params.createIntent();
+            startActivityForResult(intent, FILE_CHOOSER_REQUEST);
+        } catch (Exception e) {
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("audio/*");
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(Intent.createChooser(intent, "Select Audio Files"), FILE_CHOOSER_REQUEST);
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == FILE_CHOOSER_REQUEST) {
-            if (filePathCallback != null) {
+            ValueCallback<Uri[]> callback = chromeClient != null ? chromeClient.consumeChooser() : null;
+            if (callback != null) {
                 Uri[] results = null;
                 if (resultCode == Activity.RESULT_OK && data != null) {
                     if (data.getClipData() != null) {
@@ -160,8 +154,7 @@ public class MainActivity extends Activity {
                         results = new Uri[]{data.getData()};
                     }
                 }
-                filePathCallback.onReceiveValue(results);
-                filePathCallback = null;
+                callback.onReceiveValue(results);
             }
         } else if (requestCode == AUDIO_PICKER_REQUEST) {
             if (resultCode == Activity.RESULT_OK && data != null && bridge != null) {
@@ -186,6 +179,8 @@ public class MainActivity extends Activity {
             boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             webView.evaluateJavascript("if (window.onStoragePermissionResult) { window.onStoragePermissionResult(" + granted + "); }", null);
         }
+        // requestCode 103 (POST_NOTIFICATIONS): no JS fanfare — denial only hides
+        // the notification, never playback.
     }
 
     @Override
@@ -202,12 +197,109 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (bridge != null) {
-            bridge.release();
-        }
-        if (webView != null) {
-            webView.destroy();
+        boolean keepAlive = false;
+        try { keepAlive = (bridge != null && bridge.isPlaying()); } catch (Exception ignored) {}
+
+        if (keepAlive) {
+            // Poweramp-grade background behavior: swiping the app away while music
+            // plays must NOT kill playback. PlaybackService keeps the process
+            // foreground; AppHolder keeps this WebView (+ its MediaPlayer through
+            // the bridge) alive; onCreate re-attaches it on relaunch.
+            if (chromeClient != null) chromeClient.setHost(null);
+        } else {
+            AppHolder.webView = null;
+            AppHolder.bridge = null;
+            AppHolder.chromeClient = null;
+            if (chromeClient != null) chromeClient.setHost(null);
+            if (bridge != null) {
+                bridge.release();
+            }
+            if (webView != null) {
+                try { webView.removeAllViews(); } catch (Exception ignored) {}
+                webView.destroy();
+            }
         }
         super.onDestroy();
+    }
+
+    /**
+     * WebChromeClient whose host Activity can be SWAPPED. Survived WebViews keep
+     * this client across Activity destruction; on relaunch the new activity
+     * becomes the host so dialogs/choosers never target a destroyed window.
+     */
+    static final class HostedChromeClient extends WebChromeClient {
+        private MainActivity host;
+        private ValueCallback<Uri[]> pendingChooser;
+
+        synchronized void setHost(MainActivity h) { host = h; }
+
+        synchronized ValueCallback<Uri[]> consumeChooser() {
+            ValueCallback<Uri[]> c = pendingChooser;
+            pendingChooser = null;
+            return c;
+        }
+
+        synchronized void cancelChooser() {
+            if (pendingChooser != null) {
+                try { pendingChooser.onReceiveValue(null); } catch (Exception ignored) {}
+                pendingChooser = null;
+            }
+        }
+
+        private android.content.Context dialogHost(WebView view) {
+            MainActivity h;
+            synchronized (this) { h = host; }
+            return h != null ? h : view.getContext();
+        }
+
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
+            new android.app.AlertDialog.Builder(dialogHost(view))
+                    .setMessage(message)
+                    .setPositiveButton("Yes", new android.content.DialogInterface.OnClickListener() {
+                        public void onClick(android.content.DialogInterface d, int w) { result.confirm(); }
+                    })
+                    .setNegativeButton("Cancel", new android.content.DialogInterface.OnClickListener() {
+                        public void onClick(android.content.DialogInterface d, int w) { result.cancel(); }
+                    })
+                    .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                        public void onCancel(android.content.DialogInterface d) { result.cancel(); }
+                    })
+                    .show();
+            return true;
+        }
+
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {
+            new android.app.AlertDialog.Builder(dialogHost(view))
+                    .setMessage(message)
+                    .setPositiveButton("OK", new android.content.DialogInterface.OnClickListener() {
+                        public void onClick(android.content.DialogInterface d, int w) { result.confirm(); }
+                    })
+                    .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                        public void onCancel(android.content.DialogInterface d) { result.cancel(); }
+                    })
+                    .show();
+            return true;
+        }
+
+        @Override
+        public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams fileChooserParams) {
+            MainActivity h;
+            synchronized (this) { h = host; }
+            if (h == null || h.isDestroyed() || h.isFinishing()) {
+                try { callback.onReceiveValue(null); } catch (Exception ignored) {}
+                return false;
+            }
+            cancelChooser();
+            synchronized (this) { pendingChooser = callback; }
+            try {
+                h.launchFilePicker(fileChooserParams);
+                return true;
+            } catch (Exception e) {
+                cancelChooser();
+                return false;
+            }
+        }
     }
 }

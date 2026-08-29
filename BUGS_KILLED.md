@@ -383,3 +383,38 @@ track by generation guard, no white flash/debug leftovers, no crash on skip spam
 - Main recycler remains absolute/fixed-height to avoid WebView scroll anchoring. No spacer height mutation while scrolling.
 - JSDOM profiling proof: idle intervals before/after 500ms = 0/0, idle RAF delta = 0, 25 rows mounted before and after deep scroll, album art present, duration/trailing controls absent, scrollTop stayed 5800 after 30 scroll events, playing starts one interval, pause clears it back to 0, no JS errors.
 - Rebuilt signed APK as versionCode 43 / versionName 1.42.
+
+## v1.43 — the "self-scrolling, lifeless, forgetful" triple kill
+
+1. **Library scrolled itself forever.** Root cause: `overflow-anchor` is NOT
+   inherited; v1.41 only disabled it on `.simple-virtual-list`, so any rebuilt
+   row/img inside could still become the scroll anchor. Each rebuild changed the
+   rows' translate → Chromium "compensated" scrollTop → `scroll-behavior:smooth`
+   animated each compensation → more scroll events → more rebuilds: a
+   self-sustaining downward drift. Side effects: rows shifted under taps
+   (felt like "playing songs hallucinate") and covers flickered.
+   Killed: `overflow-anchor:none !important` for the entire
+   `.simple-virtual-list`/`.song-rows-catalog` subtrees,
+   `scroll-behavior:auto !important` on `#library-scroll-container`
+   (explicit `scrollTo({behavior:"smooth"})` calls still animate), translate
+   writes skipped when unchanged. Suite E: scroll storms of 30 events never
+   move `scrollTop`; window translate matches overscan math.
+2. **Artwork gone everywhere (lifeless player).** Native fast-path
+   (`buildSongFastFromStore`) emitted
+   `content://media/external/audio/albumart/<id>` URIs; a WebView hosting a
+   `file://` page refuses those on current builds → every cover fell back to
+   `default.png`. Fix: `extractStoreAlbumArt()` decodes each album id once per
+   run into the disk cache and emits `file://` (same cache/budget as the
+   retriever paths). JS gate `sanitizeTrackArtwork()` neutralizes stale
+   persisted `content://` art; one-time migration `maybeRunArtworkRecovery()`
+   (versioned, `artRecoveryVersion`) re-scans enabled roots to repopulate —
+   and the migration stamp is NOT in default settings so upgrades actually
+   trigger it (the mistake v1.36's visual recovery made).
+3. **Manual EQ sliders were silent on Android** — only WebAudio (desktop)
+   filters moved. Now they drive `setNativeEqBand` (+ bass boost on band 0).
+4. **Whole catalog could vanish on restart.** Done-phase persistence was
+   gated on the done event's own batch being non-empty (`changed`); libraries
+   ending on an exact batch boundary persisted nothing. Done now always calls
+   `folderMergeNow()` (chunked, once per scan — v1.14 contract).
+5. **No 2D canvas context = dead boot.** `getContext("2d")` null at top level
+   aborted mount (`setTransform`). Null-object ctx + palette-pass guard.

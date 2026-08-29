@@ -3,9 +3,11 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_TOOLS="/home/user/android-sdk/build-tools/34.0.0"
 PLATFORM_JAR="/home/user/android-sdk/platforms/android-34/android.jar"
-KEYSTORE="$PROJECT_DIR/keystore/audify.keystore"
-KEY_ALIAS="audify"
-KEY_PASS="audify123"
+KEYSTORE="${DADDYAMP_KEYSTORE:-$PROJECT_DIR/keystore/audify.keystore}"
+KEY_ALIAS="${DADDYAMP_KEY_ALIAS:-audify}"
+# v1.44: credentials come from the environment when provided (fallback kept only
+# so legacy local builds keep working; CI/release should always set the env vars).
+KEY_PASS="${DADDYAMP_KEY_PASS:-audify123}"
 
 TEMP_DIR="/tmp/apk_build"
 rm -rf "$TEMP_DIR"
@@ -21,8 +23,8 @@ $SDK_TOOLS/aapt2 link -o "$TEMP_DIR/base.apk" \
   --java "$PROJECT_DIR/gen" \
   --min-sdk-version 21 \
   --target-sdk-version 34 \
-  --version-code 43 \
-  --version-name "1.42" \
+  --version-code 46 \
+  --version-name "1.45" \
   "$TEMP_DIR/compiled.zip"
 
 echo "3. Compiling Java sources..."
