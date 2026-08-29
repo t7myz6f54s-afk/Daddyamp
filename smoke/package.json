@@ -1,0 +1,14 @@
+{
+  "name": "daddyamp-smoke",
+  "version": "1.43.0",
+  "private": true,
+  "type": "module",
+  "description": "DaddyAmp regression battery (jsdom + fake-indexeddb + Android bridge stubs)",
+  "scripts": {
+    "test": "node smoke.mjs"
+  },
+  "dependencies": {
+    "fake-indexeddb": "^6.0.0",
+    "jsdom": "^24.1.0"
+  }
+}
