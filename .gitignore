@@ -1,2 +1,6 @@
 *.idsig
 .gh_token
+
+# agent additions
+smoke/node_modules/
+.DS_Store

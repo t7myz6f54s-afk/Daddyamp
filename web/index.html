@@ -35,6 +35,11 @@
   --accent-soft: rgba(0, 229, 255, 0.12);
   --accent-glow: rgba(0, 229, 255, 0.25);
   --accent-ambient: rgba(0, 229, 255, 0.08);
+  /* Adaptive player backdrop (deep tones derived from the playing cover;
+     defaults keep the classic abyss so no-art is visually unchanged) */
+  --deep-1: #0B0D13;
+  --deep-2: #060709;
+  --deep-3: #090B10;
   --heart-color: #FF3366;
 
   /* Layout Dimensions */
@@ -1946,12 +1951,14 @@ body, html { background: var(--void); }
   width: 120%;
   height: 120%;
   object-fit: cover;
-  filter: blur(var(--ambient-blur)) saturate(1.12);
+  filter: blur(var(--ambient-blur)) saturate(1.12); /* fallback path only (tainted/rasterless sources) */
   transform: scale(1.1);
   opacity: 0;
   transition: opacity var(--dur-ambient) ease;
-  will-change: opacity;
 }
+/* Baked sources carry the blur in their PIXELS (48px bake upscaled by layout)
+   → zero per-frame filter cost, no promotion, butter on budget GPUs. */
+.ambient-img.baked { filter: none; }
 .ambient-img.front { opacity: 1; }
 .ambient-scrim {
   position: absolute;
@@ -2039,7 +2046,11 @@ body, html { background: var(--void); }
 
 /* ---- Player: art-driven hero, glass deck, scrim ---- */
 #full-player-screen {
-  background: var(--bg-abyss);
+  /* Poweramp-style adaptive backdrop: deep gradient derived from the playing
+     cover's palette (--deep-* recolor per track via applyPaletteNew); defaults
+     are the abyss tones, so no artwork = unchanged classic look. */
+  background: linear-gradient(168deg, var(--deep-1) 0%, var(--deep-3) 46%, var(--deep-2) 100%);
+  transition: background 0.6s ease;
 }
 #full-player-screen::after {
   content: "";
@@ -2052,10 +2063,17 @@ body, html { background: var(--void); }
 }
 .player-ambient-glow { opacity: 0.6; }
 .player-bottom-deck {
+  /* Old-WebView fallback first (no color-mix); modern rule below overrides it */
   background: linear-gradient(180deg, rgba(11, 11, 14, 0.08) 0%, rgba(10, 10, 13, 0.6) 40%, rgba(7, 7, 9, 0.9) 100%);
+  /* Glass deck inherits the cover's deep tones (faint hue, still black-souled) */
+  background: linear-gradient(180deg,
+      color-mix(in srgb, var(--deep-3) 22%, transparent) 0%,
+      color-mix(in srgb, var(--deep-2) 68%, transparent) 42%,
+      color-mix(in srgb, var(--deep-2) 94%, transparent) 100%);
   backdrop-filter: blur(26px) saturate(1.2);
   -webkit-backdrop-filter: blur(26px) saturate(1.2);
   border-top: 1px solid rgba(255, 255, 255, 0.09);
+  transition: background 0.6s ease;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 .artwork-frame-box {
@@ -2064,7 +2082,10 @@ body, html { background: var(--void); }
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
 }
-.artwork-main-img { will-change: transform, opacity; }
+/* v1.46: hero stays on the plain software paint path — will-change forced a
+   permanent GPU composite layer (black-texture failure class on budget GPUs,
+   while tiny unpromoted row thumbs always rastered: exactly the field symptom). */
+.artwork-main-img { display: block; }
 
 /* Track-change motion: art morph + text rise */
 @keyframes artMorphIn {
@@ -2397,12 +2418,12 @@ html.reduce-motion #player-artwork-img { animation: none !important; }
   width: 120%;
   height: 120%;
   object-fit: cover;
-  filter: blur(var(--ambient-blur)) saturate(1.12);
+  filter: blur(var(--ambient-blur)) saturate(1.12); /* fallback path only (non-baked sources) */
   transform: scale(1.1);
   opacity: 0;
   transition: opacity var(--dur-ambient) ease;
-  will-change: opacity;
 }
+.player-ambient-layer .ambient-img.baked { filter: none; }
 .player-ambient-layer .ambient-img.front { opacity: 1; }
 .player-ambient-layer .ambient-scrim {
   position: absolute;
@@ -3155,8 +3176,11 @@ html.mini-has-context .mini-context-chip { display: inline; }
 .nav-bottom-tab.active svg { transform: translateY(-1px) scale(1.08); filter: drop-shadow(0 0 7px var(--accent-glow)); }
 .nav-bottom-tab.active span { transform: scale(1.04); }
 .nav-bottom-tab:active { transform: scale(0.94); opacity: 0.72; }
+/* v1.46 GPU-sin removal: container breathes via TRANSFORM ONLY. Animating
+   filter: on a container holding a blurred fullscreen image invalidated the
+   most expensive layer on the screen every single frame, forever. */
 .player-ambient-layer { animation: ambientDrift 9.5s ease-in-out infinite alternate; transform-origin: 50% 15%; }
-@keyframes ambientDrift { from { transform: scale(1.00) translate3d(0,0,0); filter: saturate(1); } to { transform: scale(1.035) translate3d(0,-8px,0); filter: saturate(1.16); } }
+@keyframes ambientDrift { from { transform: scale(1.00) translate3d(0,0,0); } to { transform: scale(1.035) translate3d(0,-8px,0); } }
 @keyframes artMorphIn { from { transform: scale(0.90); opacity: 0.25; } 62% { transform: scale(1.018); opacity: 1; } to { transform: scale(1); opacity: 1; } }
 .stage-switcher-bar { position: relative; isolation: isolate; }
 .stage-pill-indicator {
@@ -3254,6 +3278,20 @@ html.is-breathing.rms-breath #player-artwork-img,
 .eq-live-bar { animation: none !important; }
 .player-ambient-layer { animation: none !important; }
 .row-artwork-frame::before, .mini-cover-shell::before, .album-thumb-container::before, .drilldown-art-box::before { animation: none !important; }
+
+/* v1.43 runaway-scroll kill. ROOT CAUSE: overflow-anchor is NOT inherited, so the
+   v1.41 fix (overflow-anchor:none on .simple-virtual-list only) still let Chromium
+   pick any rebuilt row/img inside as a scroll anchor. Every rebuild mutated the
+   tree + changed the rows' translate, the anchor then "compensated" scrollTop, and
+   scroll-behavior:smooth turned each compensation into an ANIMATED scroll — firing
+   more scroll events → more rebuilds → more compensation. A self-sustaining
+   downward drift: the library scrolled itself forever, rows shifted under taps
+   ("wrong song") and covers flickered. Kill scroll anchoring for the whole catalog
+   subtree + force instant programmatic scroll behavior here. Explicit
+   scrollTo({behavior:'smooth'}) calls (tab switch, portal) are unaffected. */
+.simple-virtual-list, .simple-virtual-list * { overflow-anchor: none !important; }
+.song-rows-catalog, .song-rows-catalog * { overflow-anchor: none !important; }
+#library-scroll-container { scroll-behavior: auto !important; }
 
 </style>
 </head>
@@ -4363,6 +4401,9 @@ let state = {
     replayLeveling: true,
     performanceMode: "auto",
     visualRecoveryVersion: 139,
+    // NOTE: artRecoveryVersion intentionally NOT defaulted here — defaults merge
+    // into upgraded users' settings too, and a pre-set stamp would skip the
+    // one-time recovery exactly for the users who need it (v1.36's mistake).
     transparentBackground: false,
     wallpaperDim: 0.74,
     listTapOpenPlayer: false,
@@ -4413,7 +4454,12 @@ document.addEventListener("visibilitychange", handleAppVisibilityChange);
 
 const audioEl = document.getElementById("html5-audio-element");
 const canvas = document.getElementById("poweramp-canvas-scrubber");
-const ctx = canvas.getContext("2d");
+// 2D context may be unavailable (sandboxed/failed WebView renderer): a null-object
+// keeps the whole scrubber path inert instead of aborting app mount (BOOT_ERROR).
+const ctx = (function () {
+  try { const c = canvas.getContext("2d"); if (c) return c; } catch (e) {}
+  return new Proxy({}, { get: (t, k) => (k === "canvas" ? canvas : () => undefined), set: () => true });
+})();
 
 const isAndroid = typeof window.AndroidBridge !== "undefined";
 
@@ -4455,6 +4501,7 @@ window.addEventListener("DOMContentLoaded", () => {
   syncSystemVolumeFromAndroid();
   initFolderSystem();
   attachCoverGestures();
+  armPlayerArtDiagnostics();
   attachFullPlayerFluidGestures();
   attachCatalogLoadMore();
   attachLibraryPinchZoom();
@@ -4933,17 +4980,22 @@ function hydrateIdlePlayerFromLibrary() {
   document.getElementById("mini-meta-title").textContent = song.title || "No track selected";
   const miniArtistLine = document.getElementById("mini-meta-artist");
   if (miniArtistLine) miniArtistLine.textContent = song.artist || "DaddyAmp";
-  document.getElementById("mini-thumb-img").src = song.artwork || "artwork/default.png";
+  // mini thumb src follows the verified-first pipeline (preloader below).
   document.getElementById("player-song-title").textContent = song.title || "No track selected";
   document.getElementById("player-song-artist").textContent = `${song.artist || 'Unknown Artist'} • ${song.album || 'Library'}`;
-  document.getElementById("player-artwork-img").src = song.artwork || "artwork/default.png";
+  // Verified-first, even at boot: the startup art has the same failure surface.
+  preloadTrackArt(song, (verifiedSrc) => {
+    const hero = document.getElementById("player-artwork-img");
+    hero.removeAttribute("data-fb");
+    hero.src = verifiedSrc;
+    setAmbientArt(verifiedSrc, true);
+  });
   state.duration = song.duration || 0;
   state.currentTime = 0;
   updateTimerDisplays();
   updateMiniDeckMeta();
   updatePlayerContextUI();
   updateHeartVisuals(song.favorite);
-  setAmbientArt(song.artwork || "artwork/default.png", true);
 }
 
 function updateAudioInfoChip() {
@@ -5001,7 +5053,7 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   const miniArtistLine = document.getElementById("mini-meta-artist");
   const chipEl = document.getElementById("mini-format-chip");
   if (miniArtistLine) miniArtistLine.textContent = song.artist;
-  document.getElementById("mini-thumb-img").src = song.artwork || "artwork/default.png";
+  // mini thumb src is set verified-first by the preloadTrackArt callback below.
 
   // Format chip on mini player (survives track loads; prefers mimeType for content URIs)
   if (chipEl && miniArtistLine) {
@@ -5020,15 +5072,20 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   document.getElementById("player-song-title").textContent = song.title;
   document.getElementById("player-song-artist").textContent = `${song.artist} • ${song.album}`;
   
-  const artImg = document.getElementById("player-artwork-img");
-  if (isSpeedMode()) {
-    artImg.style.opacity = "1";
-    artImg.src = song.artwork || "artwork/default.png";
-  } else {
-    artImg.style.opacity = "0.4";
-    artImg.src = song.artwork || "artwork/default.png";
-    setTimeout(() => { artImg.style.opacity = "1"; }, 60);
-  }
+  // Now-playing art: verified-first (single-flight). Surfaces receive art only
+  // after the preloader proves the URL decodes; a failure paints the placeholder
+  // for this track and logs ART_DECODE_FAIL — never a stranded default.
+  if (!isSpeedMode()) document.getElementById("player-artwork-img").style.opacity = "0.4";
+  preloadTrackArt(song, (verifiedSrc) => {
+    const hero = document.getElementById("player-artwork-img");
+    hero.removeAttribute("data-fb"); // fresh, verified attempt for THIS track
+    hero.src = verifiedSrc;
+    hero.style.opacity = "1";
+    const mini = document.getElementById("mini-thumb-img");
+    if (mini) { mini.removeAttribute("data-fb"); mini.src = verifiedSrc; }
+    setAmbientArt(verifiedSrc, isSpeedMode());
+    if (!isSpeedMode()) retriggerAnim(hero, "art-enter");
+  });
 
   updatePlayerContextUI();
 
@@ -5073,12 +5130,10 @@ function loadTrack(index, autoPlay = true, preSeekMs = null) {
   state.currentTime = 0;
   state.crossfadeTriggered = false;
   state.pendingSeekMs = (preSeekMs != null) ? preSeekMs : (song.cueOf ? (song.cueOf.start * 1000) : null);
-  if (isSpeedMode()) {
-    setAmbientArt(song.artwork || "artwork/default.png", true);
-  } else {
-    setAmbientArt(song.artwork || "artwork/default.png");
+  // Ambient walls + art morph fire from the preloader callback above (verified
+  // art only). The rest of the track-change mood/text choreography stays here.
+  if (!isSpeedMode()) {
     applyInstantSongMood(song);
-    retriggerAnim(document.getElementById("player-artwork-img"), "art-enter");
     retriggerAnim(document.getElementById("player-song-title"), "text-enter");
     retriggerAnim(document.getElementById("player-song-artist"), "text-enter");
     retriggerAnim(document.getElementById("mini-meta-title"), "text-enter");
@@ -5851,6 +5906,17 @@ function applyPaletteNew(accent, accent2, scrimTint) {
   st.setProperty("--accent-ambient", ambient);
   st.setProperty("--accent-2", state.palette.accent2);
   st.setProperty("--scrim-tint", state.palette.scrimTint);
+  // Deep backdrop tones (the premium whole-player adaptation): hue-faithful,
+  // OLED-dark. Defaults keep abyss; any failure keeps current values.
+  try {
+    const hsl = hexToHsl(accent);
+    st.setProperty("--deep-1", hslToHex(hsl[0], Math.round(Math.min(46, Math.max(16, hsl[1] * 0.52))), 13));
+    st.setProperty("--deep-2", hslToHex(hsl[0], Math.round(Math.min(40, Math.max(12, hsl[1] * 0.42))), 6));
+  } catch (e) {}
+  try {
+    const hsl2 = hexToHsl(accent2 || accent);
+    st.setProperty("--deep-3", hslToHex(hsl2[0], Math.round(Math.min(44, Math.max(14, hsl2[1] * 0.46))), 9));
+  } catch (e) {}
   if (typeof drawPowerampScrubber === "function") drawPowerampScrubber(true);
 }
 
@@ -5950,6 +6016,7 @@ function extractCoverPalette(song) {
       const c = document.createElement("canvas");
       c.width = 30; c.height = 30;
       const x = c.getContext("2d");
+      if (!x) return; // no 2D raster: keep current accent, never crash palette pass
       x.drawImage(img, 0, 0, 30, 30);
       const d = x.getImageData(0, 0, 30, 30).data;
       let r = 0, g = 0, b = 0, count = 0;
@@ -6061,6 +6128,16 @@ function handleManualEqSlider(bandIdx, val) {
   if (webAudio.filters && webAudio.filters[bandIdx]) {
     webAudio.filters[bandIdx].gain.value = gain;
   }
+  // v1.43: manual bands must drive the native EQ too — the slider previously only
+  // moved WebAudio (desktop) so on Android it was a silent control (fake-control bug).
+  try {
+    if (isAndroid && window.AndroidBridge && window.AndroidBridge.setNativeEqBand) {
+      window.AndroidBridge.setNativeEqBand(bandIdx, gain * 100);
+      if (bandIdx === 0 && window.AndroidBridge.setNativeBassBoost) {
+        window.AndroidBridge.setNativeBassBoost(gain > 0 ? gain * 120 : 0);
+      }
+    }
+  } catch (e) {}
 }
 
 /* =========================================================================
@@ -7846,9 +7923,84 @@ function pambientImages() {
   return [document.getElementById("pamb-img-a"), document.getElementById("pamb-img-b")];
 }
 
+/* v1.45 single-flight now-playing art pipeline (Poweramp-style).
+   The track's art is decoded ONCE through a preloader; the player hero, mini
+   thumb and ambient walls only ever receive a PREVERIFIED URL. A failed decode
+   resolves to the placeholder FOR THAT URL ONLY (never stranded by a stale
+   one-shot flag) and logs one ART_DECODE_FAIL line per track via the bridge —
+   the device diagnostic channel for this bug class. Generation-gated, so a
+   stale decode can never clobber a newer track. */
+const artPreloadCache = {}; // url -> true (verified) | false (decode failed)
+const artLoadLog = {};      // songId -> one log already emitted
+function preloadTrackArt(song, apply) {
+  const gen = state.playGen;
+  const fallback = "artwork/default.png";
+  const finish = (src) => { if (gen === state.playGen) { try { apply(src); } catch (e) {} } };
+  const url = song && song.artwork ? String(song.artwork) : "";
+  if (!url || url === fallback) { finish(fallback); return; }
+  if (artPreloadCache[url] === true) { finish(url); return; }
+  if (artPreloadCache[url] === false) { finish(fallback); return; }
+  const im = new Image();
+  im.onload = () => { artPreloadCache[url] = true; finish(url); };
+  im.onerror = () => {
+    artPreloadCache[url] = false;
+    if (song && song.id != null && !artLoadLog[song.id]) {
+      artLoadLog[song.id] = true;
+      try { if (window.AndroidBridge && AndroidBridge.log) AndroidBridge.log("ART_DECODE_FAIL id=" + song.id + " url=" + url.slice(0, 140)); } catch (e) {}
+    }
+    finish(fallback);
+  };
+  im.src = url;
+}
+
+/* v1.46: bake ambient blur into pixels ONCE instead of blurring on the GPU
+   every frame. Downscaling a verified cover to a 48px canvas and letting the
+   layout upscale it reproduces the gaussian look at ~1/1000th the raster cost.
+   Tainted/rasterless sources fall back to the CSS-filter path (unchanged). */
+const ambientThumbCache = {}; // url -> dataURL string | 0 (bake failed) | undefined (not tried)
+function bakeAmbientThumb(url, done) {
+  try {
+    const im = new Image();
+    if (/^https?:/i.test(url)) im.crossOrigin = "anonymous";
+    im.onload = () => {
+      try {
+        const S = 48;
+        const cv = document.createElement("canvas");
+        cv.width = S; cv.height = S;
+        const cx = cv.getContext("2d");
+        if (!cx || typeof cv.toDataURL !== "function") { done(null); return; }
+        // cover-crop center square, then two passes of downscale = soft gaussian
+        const s = Math.min(im.naturalWidth || im.width, im.naturalHeight || im.height);
+        const ox = ((im.naturalWidth || im.width) - s) / 2, oy = ((im.naturalHeight || im.height) - s) / 2;
+        cx.drawImage(im, ox, oy, s, s, 0, 0, S, S);
+        const out = cv.toDataURL("image/jpeg", 0.72);
+        done(out && out.length > 64 ? out : null);
+      } catch (e) { done(null); }
+    };
+    im.onerror = () => done(null);
+    im.src = url;
+  } catch (e) { done(null); }
+}
+
 function setAmbientArt(url, instant) {
   if (!url) url = "artwork/default.png";
-  try { document.documentElement.style.setProperty("--mini-art-url", `url("${String(url).replace(/"/g, '%22')}")`); } catch (e) {}
+  const originalUrl = url;
+  // Upgrade to a baked thumbnail when available; kick the bake otherwise.
+  if (!/^data:/.test(url)) {
+    const cached = ambientThumbCache[url];
+    if (cached) url = cached;
+    else if (cached === undefined) {
+      ambientThumbCache[url] = 0;
+      bakeAmbientThumb(url, (t) => {
+        ambientThumbCache[url] = t || 0;
+        // Bake finished while this art is still on stage → cheap glide to the cheap version.
+        if (t && (state.songs[state.currentIndex] && (state.songs[state.currentIndex].artwork === originalUrl))) {
+          try { setAmbientArt(t, true); } catch (e) {}
+        }
+      });
+    }
+  }
+  try { document.documentElement.style.setProperty("--mini-art-url", `url("${String(originalUrl).replace(/"/g, '%22')}")`); } catch (e) {}
   // One atmosphere: the app wall + the player route wall swap together, never frozen
   [ambientImages(), pambientImages()].forEach(pair => swapAmbientPair(pair, url, instant));
 }
@@ -7862,10 +8014,15 @@ function swapAmbientPair(imgs, url, instant) {
     cur.classList.remove("front");
     ambient.front = 1 - ambient.front;
   };
-  if (instant) { next.onload = null; next.onerror = null; next.src = url; apply(); return; }
+  if (instant) { next.onload = null; next.onerror = null; setAmbientResource(next, url); apply(); return; }
   next.onload = apply;
-  next.onerror = () => { next.onerror = null; next.src = "artwork/default.png"; };
-  next.src = url;
+  next.onerror = () => { next.onerror = null; setAmbientResource(next, "artwork/default.png"); };
+  setAmbientResource(next, url);
+}
+
+function setAmbientResource(imgEl, url) {
+  imgEl.classList.toggle("baked", /^data:/.test(url));
+  imgEl.src = url;
 }
 
 function hexToHsl(hex) {
@@ -7928,9 +8085,12 @@ function heroArtExpand() {
   try {
     const a = mini.getBoundingClientRect();
     const b = hero.getBoundingClientRect();
+    // Pre-layout rects produce 0/∞ transforms (hero vanishes off-screen for good).
+    if (!b.width || !b.height) return;
     const dx = (a.left + a.width / 2) - (b.left + b.width / 2);
     const dy = (a.top + a.height / 2) - (b.top + b.height / 2);
     const sc = a.width / b.width;
+    if (!isFinite(sc)) return;
     hero.style.transition = "none";
     hero.style.transform = "translate(" + dx + "px, " + dy + "px) scale(" + sc + ")";
     void hero.offsetWidth;
@@ -7946,9 +8106,11 @@ function heroArtCollapse() {
   try {
     const a = mini.getBoundingClientRect();
     const b = hero.getBoundingClientRect();
+    if (!b.width || !b.height) return;
     const dx = (a.left + a.width / 2) - (b.left + b.width / 2);
     const dy = (a.top + a.height / 2) - (b.top + b.height / 2);
     const sc = a.width / b.width;
+    if (!isFinite(sc)) return;
     hero.style.transition = "transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1)";
     hero.style.transform = "translate(" + dx + "px, " + dy + "px) scale(" + sc + ")";
     setTimeout(() => { hero.style.transition = ""; hero.style.transform = ""; }, 460);
@@ -8249,7 +8411,46 @@ function ensureTrackId(t) {
   if (t.id == null || t.id === "") {
     t.id = (t.url || t.path) ? folderTrackId(t.url || t.path) : (Date.now() + Math.floor(Math.random() * 1e6));
   }
+  sanitizeTrackArtwork(t);
   return t;
+}
+
+/* v1.43 artwork honesty gate. Native fast-scans (pre-v1.43) handed the WebView
+   content://media/external/audio/albumart URIs, which an file:// page cannot
+   render on current WebView builds — every cover collapsed to the placeholder
+   ("artwork taken down"). v1.43 native emits cached file:// art instead; this
+   gate neutralizes stale content:// art persisted in old libraries so rows,
+   player and ambient walls render a honest placeholder until the one-time
+   recovery re-scan (maybeRunArtworkRecovery) replaces them with real art. */
+function sanitizeTrackArtwork(t) {
+  if (t && typeof t.artwork === "string" && t.artwork.startsWith("content://media/external/audio/albumart")) {
+    t.artwork = "";
+  }
+}
+
+/* One-time per-upgrade recovery: re-scan enabled folder roots so the native
+   side can repopulate artwork as renderable file:// caches. Runs at most once
+   per install (versioned), only on Android, only when stale art exists. */
+function maybeRunArtworkRecovery() {
+  try {
+    if (!isAndroid) { if (state.settings.artRecoveryVersion == null) { state.settings.artRecoveryVersion = 143; persistState(); } return; }
+    if (Number(state.settings.artRecoveryVersion || 0) >= 143) return;
+    state.settings.artRecoveryVersion = 143;
+    persistState();
+    const roots = (typeof folderState !== "undefined" && folderState.roots) ? folderState.roots : [];
+    if (!roots.some(r => r && r.enabled)) return;
+    // Stale content:// albumart persisted by pre-v1.43 builds (unrenderable in WebView)?
+    // If the catalog is clean and the scheduled auto-rescan (8s) is enabled it will
+    // naturally repaint art — avoid a duplicate boot scan. Otherwise recover now.
+    let stale = false;
+    if (typeof folderState !== "undefined" && folderState.tracks && folderState.tracks.forEach) {
+      folderState.tracks.forEach(s => {
+        if (s && typeof s.artwork === "string" && s.artwork.startsWith("content://media/external/audio/albumart")) stale = true;
+      });
+    }
+    if (!stale && state.settings.folderAutoScan !== false) return;
+    roots.forEach(r => { if (r && r.enabled) startFolderScan(r.uri, false); });
+  } catch (e) {}
 }
 
 // THE identity contract: a row's SONG OBJECT is the only thing it may load.
@@ -8546,6 +8747,7 @@ async function folderInit() {
   folderApplyToLibrary._rev = undefined; // fresh catalog load → apply must run once
   folderApplyToLibrary();
   if (typeof renderLibraryTab === "function") renderLibraryTab();
+  maybeRunArtworkRecovery();
 }
 
 /* ---------------------------------------------------------------- scan flow */
@@ -8608,7 +8810,14 @@ window.onFolderScanProgress = function(p) {
     const root = folderRootByUri(uri);
     if (root) { root.lastScan = Date.now(); root.accessLost = false; }
     persistFolderRoots();
-    if (changed || (p.removedCount || 0) > 0) folderMergeNow(); else folderApplyToLibrary();
+    // v1.43 data-loss kill: persistence must happen EXACTLY ONCE per scan, here at
+    // done — never gated on `changed`. Changes usually arrive in earlier progress
+    // batches; a done event with an empty trailing batch (exact batch-boundary
+    // library) previously skipped folderMergeNow → the whole catalog silently
+    // vanished on restart even though the library looked fine during the scan.
+    // persistFolderSongs is chunked+single-shot per scan (v1.14 contract), and
+    // folderApplyToLibrary self-guards no-op rebuilds. Unconditional is correct.
+    folderMergeNow();
     if (typeof renderMusicFoldersSettings === "function") renderMusicFoldersSettings();
     if (state.currentTab === "folders") renderLibraryTab();
     if (p.error) {
@@ -9175,6 +9384,26 @@ function armArtFallback() {
   }, true);
 }
 
+/* Long-press the Now Playing header tag → full hero diagnostic toast + log.
+   The device-side truth table for ANY "no cover" report: is the src verified,
+   did it decode (naturalWidth), does it have a rect. */
+function armPlayerArtDiagnostics() {
+  const tag = document.getElementById("player-context-tag");
+  if (!tag || tag.dataset.diag) return;
+  tag.dataset.diag = "1";
+  let t = null;
+  const report = () => {
+    const img = document.getElementById("player-artwork-img");
+    if (!img) return;
+    const r = img.getBoundingClientRect();
+    const msg = `ART src=${String(img.getAttribute("src") || "").slice(0, 34)} dec=${img.complete && img.naturalWidth > 0 ? "OK" : "FAIL(" + img.naturalWidth + ")"} rect=${Math.round(r.width)}x${Math.round(r.height)}@${Math.round(r.top)} op=${img.style.opacity || "auto"}`;
+    displayToast(msg);
+    try { if (window.AndroidBridge && AndroidBridge.log) AndroidBridge.log(msg); } catch (e) {}
+  };
+  tag.addEventListener("touchstart", () => { t = setTimeout(report, 700); }, { passive: true });
+  ["touchend", "touchcancel", "touchmove"].forEach(ev => tag.addEventListener(ev, () => { clearTimeout(t); }, { passive: true }));
+}
+
 function attachCoverGestures() {
   const box = document.querySelector(".artwork-frame-box");
   if (!box || box.dataset.gestures) return;
@@ -9411,7 +9640,8 @@ function updateSimpleVirtualRows(force) {
   const end = Math.min(total, start + count);
   if (!force && start === ctx.start && end === ctx.end) return;
   ctx.start = start; ctx.end = end;
-  ctx.rows.style.transform = `translate3d(0, ${start * ctx.rowH}px, 0)`;
+  const y = start * ctx.rowH;
+  if (ctx._lastY !== y) { ctx._lastY = y; ctx.rows.style.transform = `translate3d(0, ${y}px, 0)`; }
   const frag = document.createDocumentFragment();
   for (let i = start; i < end; i++) frag.appendChild(simpleSongRow(ctx.tracks[i], i));
   ctx.rows.replaceChildren(frag);

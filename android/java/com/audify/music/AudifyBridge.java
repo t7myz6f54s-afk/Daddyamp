@@ -57,7 +57,9 @@ import java.util.List;
 public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     private static final String TAG = "DaddyAmpBridge";
 
-    private final Activity activity;
+    // activity is re-attachable since v1.44: when the Activity is destroyed while
+    // audio keeps playing, the relaunched MainActivity hands us the new instance.
+    private Activity activity;
     private final WebView webView;
     private MediaPlayer mediaPlayer;
     private MediaPlayer nextMediaPlayer;
@@ -105,6 +107,45 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
         setupNoisyReceiver();
         setupMediaSession();
         setupSystemVolumeObserver();
+        PlaybackService.attachBridge(this);
+    }
+
+    /** Called when a fresh MainActivity takes over this live bridge (v1.44
+     * swipe-survival). Context-dependent wiring bound to the old Activity is
+     * re-registered; the WebView, MediaPlayer and session are untouched. */
+    public synchronized void attachActivity(Activity newActivity) {
+        if (newActivity == null) return;
+        this.activity = newActivity;
+        this.audioManager = (AudioManager) newActivity.getSystemService(Context.AUDIO_SERVICE);
+        try {
+            if (volumeObserver != null) {
+                activity.getContentResolver().unregisterContentObserver(volumeObserver);
+                volumeObserver = null;
+            }
+        } catch (Exception ignored) {}
+        setupSystemVolumeObserver();
+        try { if (folderEngine != null) folderEngine.attachActivity(newActivity); } catch (Exception ignored) {}
+        PlaybackService.attachBridge(this);
+    }
+
+    /** Single control path: notification actions + MediaSession buttons both end
+     * up here, forwarded to the app's JS transport handler. */
+    public void transport(String cmd) {
+        runOnJs("if (window.onMediaSessionTransport) { window.onMediaSessionTransport('" + cmd + "'); }");
+    }
+
+    /** Android 13+: playback notification needs a runtime grant. Asked once, at the
+     * moment it matters (first play) — never at cold boot; denial only hides the
+     * notification, playback keeps working. */
+    private static boolean notifPermAsked = false;
+    public void requestNotificationPermissionIfNeeded() {
+        try {
+            if (notifPermAsked || Build.VERSION.SDK_INT < 33) return;
+            if (activity.checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+                notifPermAsked = true;
+                activity.requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 103);
+            }
+        } catch (Exception ignored) {}
     }
 
     private void setupNoisyReceiver() {
@@ -535,6 +576,7 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     @JavascriptInterface
     public boolean playAudio(final String pathOrUri) {
         this.currentPath = pathOrUri;
+        requestNotificationPermissionIfNeeded(); // one-shot, fires only on Android 13+
         try {
             requestAudioFocus();
             registerNoisyReceiver();
@@ -1110,8 +1152,9 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
             if (genre != null && !genre.isEmpty()) mb.putString(MediaMetadata.METADATA_KEY_GENRE, genre);
             if (year > 0) mb.putLong(MediaMetadata.METADATA_KEY_YEAR, year);
             mb.putLong(MediaMetadata.METADATA_KEY_DURATION, durationSec * 1000);
+            Bitmap scaled = null;
             if (art != null) {
-                Bitmap scaled = art;
+                scaled = art;
                 if (Math.max(art.getWidth(), art.getHeight()) > 1024) {
                     float r = 1024f / Math.max(art.getWidth(), art.getHeight());
                     scaled = Bitmap.createScaledBitmap(art, (int) (art.getWidth() * r), (int) (art.getHeight() * r), true);
@@ -1121,6 +1164,11 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
             mediaSession.setMetadata(mb.build());
             int state = playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED;
             updatePlaybackState(state, positionSec * 1000, playing ? 1.0f : 0.0f);
+            // Full snapshot push → foreground notification. Use the SCALED bitmap,
+            // not the decoded original: notification memory churn per track change
+            // matters on 10k-track sessions.
+            PlaybackService.sync(activity, title, artist, scaled, playing,
+                    positionSec * 1000, durationSec * 1000, mediaSession.getSessionToken());
         } catch (Exception ignored) {}
     }
 
@@ -1271,6 +1319,9 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
             psb.setActions(actions);
             psb.setState(state, positionMs, speed);
             mediaSession.setPlaybackState(psb.build());
+            // State-only push keeps the notification + foreground lifecycle in sync
+            // (play → start service; pause → dismissible + idle stop timer).
+            PlaybackService.syncState(activity, state == PlaybackState.STATE_PLAYING, positionMs);
         } catch (Exception ignored) {}
     }
 
@@ -1518,17 +1569,23 @@ public class AudifyBridge implements AudioManager.OnAudioFocusChangeListener {
     }
 
     private void runOnJs(final String jsCode) {
-        activity.runOnUiThread(new Runnable() {
+        // Main-looper handler, not activity.runOnUiThread: the bridge (and WebView)
+        // can outlive the Activity instance while playback continues (v1.44).
+        handler.post(new Runnable() {
             @Override
             public void run() {
                 if (webView != null) {
-                    webView.evaluateJavascript(jsCode, null);
+                    try { webView.evaluateJavascript(jsCode, null); } catch (Exception ignored) {}
                 }
             }
         });
     }
 
     public void release() {
+        // Only invoked on real teardown (user quit while paused/stopped or process
+        // ending — never on swipe-kill-while-playing, which MainActivity intercepts).
+        PlaybackService.detachBridge(this);
+        PlaybackService.shutdownIfOurs(activity, this);
         unregisterNoisyReceiver();
         abandonAudioFocus();
         updateKeepScreenOn(false);
